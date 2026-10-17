@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Misar-AI/misarseo-mcp",
+  "title": "MisarSEO MCP Server",
+  "description": "Research keywords, track rankings, audit sites, monitor backlinks and AI-search visibility — from…",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/Misar-AI/misarseo-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://www.misarseo.com",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@misarseo/mcp",
+      "version": "1.0.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "MISARSEO_API_KEY",
+          "description": "Your MisarSEO API key (mseo_…). Create one at https://seo.misar.io/ai.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "MISARSEO_BASE_URL",
+          "description": "Override the API base URL. Only needed for self-hosted instances.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.misar.io/seo/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "MisarSEO API key. Format: Bearer mseo_… — create one at https://seo.misar.io/ai",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

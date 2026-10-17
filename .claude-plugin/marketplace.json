@@ -1,0 +1,22 @@
+{
+  "name": "misar",
+  "owner": {
+    "name": "Misar.AI",
+    "email": "support@misar.io",
+    "url": "https://misar.io"
+  },
+  "metadata": {
+    "description": "Official Misar.AI plugins — email, publishing, and growth tooling for AI agents.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "misarseo",
+      "source": "https://github.com/Misar-AI/misarseo-mcp",
+      "description": "Research keywords, track rankings, audit sites, monitor backlinks and AI-search visibility — from any AI assistant.",
+      "version": "1.0.0",
+      "category": "seo",
+      "strict": false
+    }
+  ]
+}

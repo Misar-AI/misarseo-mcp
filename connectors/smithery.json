@@ -1,0 +1,7 @@
+{
+  "qualifiedName": "misar/misarseo-mcp",
+  "install": "npx -y @smithery/cli install misar/misarseo-mcp --client claude",
+  "config": {
+    "apiKey": "mseo_YOUR_KEY_HERE"
+  }
+}

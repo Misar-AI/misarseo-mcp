@@ -1,0 +1,23 @@
+{
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "misarseo-key",
+      "description": "MisarSEO API key (mseo_…) — create one at https://seo.misar.io/ai",
+      "password": true
+    }
+  ],
+  "servers": {
+    "misarseo": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@misarseo/mcp@latest"
+      ],
+      "env": {
+        "MISARSEO_API_KEY": "${input:misarseo-key}"
+      }
+    }
+  }
+}

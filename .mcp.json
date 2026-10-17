@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "misarseo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@misarseo/mcp@latest"
+      ],
+      "env": {
+        "MISARSEO_API_KEY": "${MISARSEO_API_KEY}"
+      }
+    }
+  }
+}

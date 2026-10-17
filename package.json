@@ -1,0 +1,88 @@
+{
+  "name": "@misarseo/mcp",
+  "version": "1.0.0",
+  "mcpName": "io.github.Misar-AI/misarseo-mcp",
+  "description": "MisarSEO MCP server — research keywords, track rankings, audit sites, monitor backlinks, Search Console and AI-search visibility from Claude, Cursor, VS Code, Windsurf, and any MCP client.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "import": "./dist/http.js"
+    },
+    "./registry": {
+      "types": "./dist/registry.d.ts",
+      "import": "./dist/registry.js"
+    }
+  },
+  "bin": {
+    "misarseo-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "smithery.yaml",
+    "server.json",
+    "README.md",
+    "INSTALL.md",
+    "skills",
+    "agents",
+    "connectors",
+    "customgpt",
+    "web-skills"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "seo",
+    "keyword-research",
+    "rank-tracking",
+    "site-audit",
+    "backlinks",
+    "ai-search",
+    "google-search-console",
+    "claude",
+    "cursor",
+    "vscode",
+    "windsurf",
+    "misarseo"
+  ],
+  "homepage": "https://www.misarseo.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Misar-AI/misarseo-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Misar-AI/misarseo-mcp/issues"
+  },
+  "author": "Misar.AI <support@misar.io>",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

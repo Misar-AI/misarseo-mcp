@@ -1,0 +1,33 @@
+{
+  "name": "misarseo",
+  "version": "1.0.0",
+  "description": "Research keywords, track rankings, audit sites, monitor backlinks and AI-search visibility — from any AI assistant.",
+  "author": {
+    "name": "Misar.AI",
+    "email": "support@misar.io",
+    "url": "https://misar.io"
+  },
+  "homepage": "https://www.misarseo.com",
+  "repository": "https://github.com/Misar-AI/misarseo-mcp",
+  "license": "MIT",
+  "keywords": [
+    "seo",
+    "marketing",
+    "analytics",
+    "keyword-research",
+    "rank-tracking",
+    "ai-search"
+  ],
+  "mcpServers": {
+    "misarseo": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@misarseo/mcp@latest"
+      ],
+      "env": {
+        "MISARSEO_API_KEY": "${MISARSEO_API_KEY}"
+      }
+    }
+  }
+}

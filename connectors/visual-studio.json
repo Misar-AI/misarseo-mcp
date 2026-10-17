@@ -1,0 +1,16 @@
+{
+  "inputs": [],
+  "servers": {
+    "misarseo": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@misarseo/mcp@latest"
+      ],
+      "env": {
+        "MISARSEO_API_KEY": "mseo_YOUR_KEY_HERE"
+      }
+    }
+  }
+}

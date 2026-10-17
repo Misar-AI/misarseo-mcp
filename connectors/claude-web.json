@@ -1,0 +1,11 @@
+{
+  "note": "Claude.ai → Settings → Connectors → Add custom connector",
+  "name": "MisarSEO",
+  "remote_mcp_url": "https://api.misar.io/seo/mcp",
+  "authentication": {
+    "type": "bearer",
+    "header": "Authorization",
+    "value": "Bearer mseo_YOUR_KEY_HERE",
+    "obtain_at": "https://seo.misar.io/ai"
+  }
+}

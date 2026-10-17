@@ -1,0 +1,846 @@
+{
+  "serverInfo": {
+    "name": "MisarSEO",
+    "version": "1.0.0",
+    "logoUrl": "https://seo.misar.io/logo-light.png"
+  },
+  "websiteUrl": "https://www.misarseo.com",
+  "documentationUrl": "https://docs.misar.io/seo/mcp",
+  "authentication": {
+    "required": true,
+    "schemes": [
+      "bearer"
+    ],
+    "tokenUrl": "https://seo.misar.io/ai"
+  },
+  "capabilities": {
+    "tools": true,
+    "prompts": true,
+    "resources": true
+  },
+  "tools": [
+    {
+      "name": "list_projects",
+      "description": "Lists the active projects in the user's organization. FREE — database only, charges no credits. Use this whenever you need a `projectId` for another MisarSEO tool. Returns `{id, name, domain, url}` per project; pass the `id` value as `projectId`. `domain` is null for a project that has never had one set, which is not a missing lookup — get_keyword_gap and get_link_intersect read the project's own domain from this record and refuse to run without it. Archived projects are not listed."
+    },
+    {
+      "name": "get_dashboard",
+      "description": "One card per active project in the caller's organization: latest audit health, rank-tracker status, and trailing-7-day web-analytics sessions. FREE: database only. No SEO data provider is called and no credits are spent — GSC and backlinks are deliberately excluded from this view rather than fetched live, so calling this never spends a Search Console quota unit or a paid-provider credit. `audit`/`rankTracking`/`webAnalytics` are null on a card whose project has none of that data yet (never audited, no tracker configured, no analytics traffic) — a real 'not set up' fact, not a zero standing in for missing data."
+    },
+    {
+      "name": "research_keywords",
+      "description": "Research keyword data (search volume, difficulty, CPC, related ideas) for 1-5 seed keywords in one call — one research run per seed. Returns `results`, one entry per seed with `ok` — a single bad seed won't fail the batch. CHARGES CREDITS ON THE PAID DATA PROVIDER: per seed, ~30-100 credits each depending on the source, or a flat ~96 for countries served from Google Ads data (where difficulty and intent are unavailable). On the default free provider the sources are autocomplete plus the operator's own Keyword Planner account and NOTHING IS CHARGED — but volume/CPC/competition are null unless the operator configured a Keyword Planner, and null there means not measured, never zero demand. Keyword difficulty is derived for the SEED keyword only — every other returned row has a null difficulty because it was never scored, not because it is easy. Each seed returns `rowCount` (every row found) but only `topRows`, the first 20, are included in the response; say 20 when reporting what you actually saw, and use list_saved_keywords or the dashboard for the rest."
+    },
+    {
+      "name": "save_keywords",
+      "description": "Save keywords to a project's saved-keywords list. FREE — database only, charges no credits. Idempotent: re-saving an existing keyword is a no-op. If tags are provided, missing tags may be created. Tags are appended to whatever tags a keyword already carries. Ask the user for confirmation before applying or replacing tags broadly. Keywords are normalised and de-duplicated before they are written, so `savedCount` is the number of DISTINCT keywords now saved by this call — it can be lower than the number of entries submitted, and that is the figure to report. Saving does not fetch metrics: a keyword saved here has null volume/difficulty/CPC until research_keywords has run for it."
+    },
+    {
+      "name": "list_saved_keywords",
+      "description": "Lists keywords saved to a project, with whatever metrics have been cached for them (search volume, difficulty, CPC) and their tags. FREE — reads MisarSEO's own database, runs no provider lookup and charges no credits. Filter by keyword text with `search`; page through with `page` and `limit` (50, 100 or 250 rows per page — any other value is rounded down to one of those), ordered by `sort`/`order`. A metric is null when nothing has ever fetched it for that keyword — saving a keyword does not measure it. Null is not zero volume and not zero difficulty; run research_keywords to fill them. `totalCount` is how many keywords match the filter, and `rows` is only the current page of them, so report both."
+    },
+    {
+      "name": "classify_keyword_intent",
+      "description": "Classify 1-200 keywords' search intent from their wording: informational, navigational, commercial, transactional, or unknown. Uses the SAME wording heuristic keyword research already applies as its free-tier fallback, made directly callable for a keyword list with no research/volume data yet. FREE and purely local: no upstream call, no billing, no market dependency. Navigational detection is limited to destination/account phrasing (\"login\", \"official website\", ...) that means the same thing regardless of brand — a brand-name navigational query with no such phrasing classifies as `unknown` rather than a guessed label."
+    },
+    {
+      "name": "get_keyword_potential",
+      "description": "Parent Topic and Traffic Potential for one keyword, built from real SERP overlap across a BOUNDED set (up to 5) of related keywords — not a full keyword-to-URL reverse index, which this codebase's free stack does not have. Parent Topic is the related keyword whose SERP shares the most top-10 organic URLs with the seed's. Traffic Potential is the seed's own volume plus the volume of every candidate whose own #1-ranking URL is the exact same page as the seed's — a bounded floor, never the true total traffic across every keyword that page ranks for. FREE — no paid provider or plan gate. Up to 7 upstream calls per cache miss, each independently cached (30 days for the combined result), so look keywords up one at a time. `parentTopic`/`trafficPotential` are null, not zero, when the bounded sample carries no qualifying evidence. A keyword whose SERP has no organic result throws SEO_DATA_UNAVAILABLE rather than returning zeros."
+    },
+    {
+      "name": "get_keyword_serp_overview",
+      "description": "Per-keyword SERP overview: a fresh live SERP snapshot for the keyword, PLUS — when this exact keyword happens to already be tracked in this project's rank tracking — its historical position trend and SERP volatility, read straight from the SAME rank-tracking services (`get_rank_keyword_history`/`get_rank_volatility_index`) already use. `tracked.isTracked: false` means this keyword is not currently tracked in any of the project's active rank-tracking configs — an honest absence, never a fabricated trend. One upstream call (the live SERP fetch, cached 12h); the rank-tracking portion is DB-only reads. `sinceDays` only affects `tracked.history` and is ignored when the keyword is not tracked."
+    },
+    {
+      "name": "get_keyword_strategy",
+      "description": "Keyword Strategy Builder: a volume -> cluster -> page -> brief pipeline over 1-500 pasted keywords, composed entirely from existing pieces — the same bulk keyword lookup, the same shared-phrase clustering engine the saved-keyword Topic Clusters feature and get_topic_research both already use, a text-match against the project's own crawled pages, and a BOUNDED number of AI-gateway content-brief calls (one per cluster among the top few by measured volume, gated by the shared AI-gateway budget). `page.status: \"existing\"` on a cluster means the site already has a page ABOUT that topic (title/URL text-match), never a verified ranking claim — this codebase has no keyword-to-URL index. A cluster beyond the brief limit gets `brief: null, briefSkipped: true` — an honest 'not attempted', not an empty brief. Consumes the SAME keyword_lookups_per_day plan quota bulk lookups do (once per request) plus up to a handful of AI-gateway operations."
+    },
+    {
+      "name": "get_topic_research",
+      "description": "Content ideas for a seed keyword, composed from three sources this codebase already fetches for other features: the SERP for the seed (titles of pages already ranking for it), PAA-style questions (real autocomplete completions reframed as questions), and autocomplete keyword suggestions. Grouped into topic clusters by shared phrasing, using the same phrase-clustering engine the saved-keyword Topic Clusters feature uses. FREE — none of the three sources is billable in this codebase today. Three real upstream calls per request, so it is rate limited. NOT a Keywords-Explorer-style overlap report: this codebase has no keyword-to-URL index, so `clusters` group the REAL text of three OBSERVED sources rather than a fabricated 'what else these pages rank for'. `coverage.serpUnavailable`/`suggestionsUnavailable` mean that source could not be asked at all — distinct from that source genuinely returning nothing — and one source being unavailable never sinks the other two. Every idea not assigned to a cluster is still returned in `ungrouped`, never discarded."
+    },
+    {
+      "name": "get_keyword_list_share_of_voice",
+      "description": "Share of Voice across a saved keyword list: the project's own domain plus up to 3 competitor domains, scored over a saved-keyword tag (\"a saved keyword list\" in this codebase IS a saved-keyword tag — omit tagId/tagName to mean every saved keyword in the project). Reuses the EXACT Share of Voice computation rank tracking's own Share of Voice already uses (CTR-weighted visibility, a comparative index — never a click forecast). BILLABLE-ADJACENT: one live SERP fetch per keyword in the resolved list, up to a bounded per-run cap (see `truncated`) — a saved list carries no stored positions the way a rank-tracking config does. The project's own domain is read from the project row, never accepted as a parameter. `keywordsFailed` keywords (a SERP fetch that errored) are excluded from the computation, never counted as \"ranks nowhere\"."
+    },
+    {
+      "name": "get_domain_overview",
+      "description": "Returns a high-level view of a domain's organic footprint: estimated organic traffic, organic keyword count, and a 0-100 domain authority score. Use this first for domain research. `backlinks` and `referringDomains` are ALWAYS null on this tool — no data provider feeds them here, so a null is the absence of a source, not a domain with no links. Call get_backlinks_overview for those. CHARGES CREDITS ON THE PAID DATA PROVIDER (~100-300 typical) for the organic traffic/keyword figures. On the default free provider that endpoint has no equivalent, so `organicTraffic` and `organicKeywords` come back null, nothing is charged, and only the authority score is populated. Null there means not measured — never report it as zero traffic. Read `authoritySource` before quoting `authority`: 'openpagerank' is link-graph authority, 'tranco' is a POPULARITY rank used as a stand-in and must be labelled as such; a domain outside Tranco's top million honestly returns null. A result carrying data is cached 12 hours per domain; a result with neither organic keywords nor an authority score is deliberately not cached, so retrying it re-runs the lookup."
+    },
+    {
+      "name": "get_domain_batch",
+      "description": "Domain batch analysis: one authority row per domain, up to 100 at once. FREE — no paid provider call, unlike get_domain_overview. `organicTraffic`, `organicKeywords`, `backlinks` and `referringDomains` are ALWAYS null on every row — batch mode never attempts the per-domain paid rank-overview call the single-domain overview makes, since fanning that out across many domains in one call is a materially bigger paid-provider commitment than anything else this codebase does in one request. `organicUnavailableReason` states this once for the whole response; use get_domain_overview for organic figures on one domain at a time. Malformed domain entries are dropped and counted in `skippedInvalid` rather than failing the whole call. `authorityUnavailableReason` is set only when the authority provider itself failed to answer — null authority on every row without it set means every domain was looked up and found unranked, not that nothing could be looked up."
+    },
+    {
+      "name": "get_domain_authority_history",
+      "description": "Domain-authority history: the stored trend of dated authority snapshots for one project+domain, oldest first. FREE (no credits) — reads back snapshots already captured, no provider call. Empty until at least one snapshot exists: get_domain_overview auto-captures one whenever `domain` is the project's own domain, or call capture_domain_authority_snapshot directly for any domain (including a tracked competitor)."
+    },
+    {
+      "name": "capture_domain_authority_snapshot",
+      "description": "Capture a domain-authority snapshot now: calls the same free resolver get_domain_overview already uses and records today's reading, so get_domain_authority_history has a trend to read back. FREE (no credits), but this is a MUTATION — idempotent per UTC day, so calling it twice in one day does not write twice. Useful for a domain get_domain_overview would not auto-capture on its own — e.g. a tracked competitor rather than the project's own domain."
+    },
+    {
+      "name": "find_serp_competitors",
+      "description": "Compares domains competing in search results for a supplied keyword set. Useful for market and search-intelligence reports; not radius-based local SEO. The inverse of get_keyword_gap, which asks what one competitor ranks for that we do not. CHARGES CREDITS ON THE PAID DATA PROVIDER, which is also the only one that honours `resultTypes` and `includeSubdomains` and that measures `visibility`, `etv` and `rating`. On the default free provider competitors are aggregated from one live SERP per keyword: NOTHING IS CHARGED, only ORGANIC results are counted whatever `resultTypes` says, `includeSubdomains` is ignored, and visibility/traffic-estimate/rating are left unmeasured. Sorting never treats an unmeasured field as zero: rows the provider did not measure sort last and are reported in `unmeasuredForSort`. If that count equals the row count, the list is NOT ranked by anything — say so instead of presenting the first row as the strongest competitor. Omit `locationCode`/`languageCode` to use the project's default market."
+    },
+    {
+      "name": "get_keyword_gap",
+      "description": "Compares the project's own domain against up to 3 competitor domains and classifies every keyword a competitor ranks for as missing / behind / tied / ahead / unknown. The inverse of find_serp_competitors, which asks who competes for a keyword set. CHARGES CREDITS: one ranked-keywords lookup per domain, so one call costs up to 4 upstream requests (our domain plus the competitors). Each lookup is cached 12h per domain, so re-running the same comparison with a different sort or classification filter is free — do that rather than issuing a new comparison. Compares the top 1000 keywords per domain by search volume, so a large domain is compared on a slice; per-domain `coverage` reports `keywordsFetched`, `keywordsTotal`, `truncated` and `volumeFloor`. `missing` and `unknown` are NOT interchangeable: `missing` means a competitor ranks and we provably do not; `unknown` means our own slice ran out above that keyword's volume, so nothing was measured about whether we rank. Never present `unknown` as a gap. The project's own domain is read from the project record and cannot be passed in — if the project has no domain the call fails with a validation error telling the user to set one. When `unavailable` is true, no configured data provider has a ranked-keyword source and no comparison happened; the empty `rows` in that case does NOT mean the competitors rank for nothing. At most 200 rows are returned; `totalRows` is the real match count."
+    },
+    {
+      "name": "list_competitor_monitors",
+      "description": "Competitor page change detection: the specific competitor URLs monitored for a project, with `lastCheckedAt` (null until the first scheduled check reaches it). FREE — database only, no credits spent. Use get_competitor_monitor_changes for the actual detected-change timeline of one URL."
+    },
+    {
+      "name": "add_competitor_monitor",
+      "description": "Start monitoring one competitor page for changes: title/meta, a real line-level content diff (added/removed/unchanged line counts — never a fabricated similarity score), outbound links, and structured-data types. Checked once a day; the first snapshot is captured on the NEXT scheduled pass, not immediately. FREE — this codebase's own SSRF-safe fetch, no paid provider. Idempotent (re-adding an already-tracked URL is a no-op). A project can monitor at most 20 URLs."
+    },
+    {
+      "name": "remove_competitor_monitor",
+      "description": "Stops monitoring one competitor URL. Its historical snapshots and detected changes are deleted along with it (cascading delete) — unlike rank tracking's competitor removal, there is no separate archive kept."
+    },
+    {
+      "name": "get_competitor_monitor_changes",
+      "description": "Timeline of DETECTED changes for one monitored competitor URL, newest first — a check that found nothing does not appear here. Each entry's summary is a real diff: line-level content added/removed/unchanged counts with a short sample (never a fabricated similarity score), plus title/meta/status-code before-after values and added/removed external links and structured-data types."
+    },
+    {
+      "name": "get_rank_tracker",
+      "description": "Read-only access to rank tracker configs and their latest results. With `trackerId`, returns the config plus the latest snapshot per keyword. Without it, lists all trackers in the project. FREE — reads stored MisarSEO state only, runs no SERP query and charges no credits. To trigger a new check, use the dashboard. A null position means THE DOMAIN WAS NOT FOUND WITHIN THE DEPTH SEARCHED. The response states that depth as a number — use THAT number, not the config's `serpDepth`, which is what was asked for and can be several times deeper than the search source reaches. Everything past the depth searched was not measured, so a null is neither a rank of zero nor proof the page stopped ranking — say 'not found in the top N' and give the N the response states. Device columns are printed only where this deployment measures desktop and mobile as separate searches; where it does not, the response says so and prints ONE position per keyword. Never report a mobile or desktop absence from a column the response did not print, and never infer one from the config's `devices` value. `previousPosition` is a roughly 7-day-old comparison point, and when no snapshot that old exists it falls back to the EARLIEST snapshot on record — so a 'was' figure can be much older than a week. Do not quote it as a week-over-week change without checking the tracker's history length."
+    },
+    {
+      "name": "add_rank_tracking_keywords",
+      "description": "Adds keywords to an existing rank tracker config. Returns `{ added, addedIds }` — `added` counts only genuinely new keywords; anything already tracked for this config is silently skipped, so `added` can legitimately be lower than the number of keywords sent. FREE: database only, no SEO data provider is called and no credits are spent — but this CAN fail with a plan-limit error if adding these keywords would put the organization over its plan tier's rank-tracked-keywords cap, since that is a count limit, not a spend limit. This does not trigger a rank check or refresh keyword metrics — call get_rank_tracker afterward once you want positions."
+    },
+    {
+      "name": "get_rank_config_trend",
+      "description": "Per-run keyword-position-distribution buckets for a tracker, oldest first — how many tracked keywords sit in the top 3, 4-10, 11-20, or outside the top 20, per check run. Use it to answer 'is this domain's visibility trending up or down' without re-checking anything. FREE: database only. No SEO data provider is called and no credits are spent. Buckets are disjoint and cover every tracked keyword: `notRanking` is derived as the remainder, not fetched separately, and `top3 + top4to10 + top11to20 + notRanking` always equals the tracker's keyword count at that run. `device` is accepted but on every free SERP source today it narrows nothing — see get_rank_tracker's own note on this deployment's device support."
+    },
+    {
+      "name": "get_rank_movers",
+      "description": "Newcomers and fast climbers for a tracker's OWN domain, over a window. `newlyRanking` is keywords that started ranking during the window (no earlier position, or an earlier position of null). `fastClimbers` is keywords that ranked at both ends of the window and gained at least `minGain` positions. FREE: database only. No SEO data provider is called and no credits are spent. THIS IS NOT COMPETITOR DISCOVERY. No corpus of undeclared domains exists in this codebase to discover a newcomer domain from — a rank check only ever persists positions for the target domain and the already-tracked competitor list; every other domain in a fetched SERP is read and discarded. Do not describe a `newlyRanking` entry as a 'new competitor' or 'newly discovered domain' — it is a keyword the TRACKED domain itself started ranking for, nothing about a competitor. `newlyRanking` entries always have `gain: null` — there is no earlier position to measure a gain from, and `minGain` never filters them."
+    },
+    {
+      "name": "get_rank_keyword_history",
+      "description": "Per-keyword position series over time, oldest first — the same series the app's SERP-history chart draws for one tracked keyword. FREE: database only. No SEO data provider is called and no credits are spent. A `position` of `null` means checked but not found within that check's `searchedDepth` — a real event, not a missing check or a lost ranking. `searchedDepth: null` means the run predates that column, not that any particular depth was searched. At most one point per UTC day: a same-day re-check collapses to its latest reading."
+    },
+    {
+      "name": "get_rank_volatility_index",
+      "description": "SERP volatility index across recent runs — how much this tracker's own positions churned run over run, derived entirely from already-stored history (no new SERP calls). FREE: database only, no SEO data provider is called and no credits are spent. Modeled on the one step AccuRanker publicly discloses for their Grump Rating (sum of per-keyword differences / number of results), but CTR-weighted rather than a raw position delta — a #1-#2 swap counts far more than a #18-#19 swap. NOT a 0-10 Sensor score or a mood label (Semrush and MozCast do not publish their formulas, and both are calibrated against panels of hundreds of thousands to millions of keywords spanning the whole web). `volatilityIndex` is meaningful only relative to THIS tracker's own history over time, not as an absolute severity — do not describe a given value as 'high' or 'low' without comparing it to this same tracker's other points."
+    },
+    {
+      "name": "get_rank_ai_overview_trend",
+      "description": "AI Overview presence trend across a tracker's keywords, oldest first — what share of tracked keywords showed Google's AI Overview in the SERP, per check run, and how that has moved over time. FREE: database only, no SEO data provider is called and no credits are spent. Reuses `rank_snapshots.serpFeatures`, already populated by the SERP-feature capture the rank checker already does — no new SERP calls. `aiOverviewPresenceRatePct` is `keywordsWithAiOverview / keywordsTotal * 100`, rounded to one decimal, and `null` (not 0) for a run where `keywordsTotal` is 0 — nothing was checked that run, which is a missing measurement, not a truthful \"0% presence\"."
+    },
+    {
+      "name": "list_rank_annotations",
+      "description": "Chart notes on a rank tracker's own timeline — 'deployed new title tags', 'algorithm update' — oldest first. FREE: database only, no SEO data provider is called and no credits are spent. Config-level, not per-keyword or per-device: a deploy or algorithm change is a fact about the date, not about any one reading."
+    },
+    {
+      "name": "add_rank_annotation",
+      "description": "Adds a chart note to a rank tracker's own timeline. FREE: database only, no SEO data provider is called and no credits are spent. Config-level, not per-keyword or per-device. A config can hold at most 100 notes."
+    },
+    {
+      "name": "remove_rank_annotation",
+      "description": "Removes a chart note from a rank tracker's own timeline. FREE: database only, no SEO data provider is called and no credits are spent. Succeeds whether or not `id` matched an existing note."
+    },
+    {
+      "name": "list_rank_cannibalisation",
+      "description": "Tracked keywords whose latest ranking URL is not the target URL you declared for them (see set_rank_keyword_target_url). FREE: database only, no SEO data provider is called and no credits are spent. NOT the same detector as get_cannibalisation_report (Search Console-based), which finds two-or-more of the site's OWN pages splitting Search Console impressions for one query. A rank check records only the single best-ranking URL per keyword per run, so this can only tell you the winning page was not the one you intended — not that a second own page also appeared in the SERP."
+    },
+    {
+      "name": "set_rank_keyword_target_url",
+      "description": "Sets or clears the URL you intend to rank for a tracked keyword. Feeds list_rank_cannibalisation — set this for the keywords you care about, then check for a mismatch after the next run. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "list_rank_keyword_tags",
+      "description": "Lists the tags in use on one rank tracker, plus the project's whole tag vocabulary. Use it to find tag IDs before calling update_rank_keyword_tag, and to see how a tracker with hundreds of keywords is already organised. FREE: database only. No SEO data provider is called and no credits are spent, so it is safe to call as often as needed. The two lists mean different things and are deliberately separate. `tagsInUse` is what THIS tracker's keywords actually carry, and its `keywordCount` counts TRACKED keywords carrying the tag — not the saved-keyword count the same tag carries elsewhere, which would never match the rows it filters. It is empty for a tracker that has never used a tag. `projectTags` is the project's full vocabulary including tags unused here, so a tag can be reused rather than re-coined. The vocabulary is the project's EXISTING saved-keyword tags: one namespace shared with the saved-keyword list, not a second set."
+    },
+    {
+      "name": "update_rank_keyword_tag",
+      "description": "Attaches or detaches ONE tag across a selection of tracked keywords (up to 500 keyword IDs per call). One tag per call — applying three tags takes three calls. FREE: database only. No SEO data provider is called and no credits are spent. The tag is the project's EXISTING saved-keyword vocabulary, shared with the saved-keyword list. Pass `tagId` for a tag that already exists (find it with list_rank_keyword_tags), or `tagName` to match on the normalised name. On `action: \"add\"` an unknown `tagName` CREATES that tag for the whole project, so check the vocabulary first rather than coining near-duplicates; on `action: \"remove\"` an unknown tag is NOT_FOUND, because there is nothing to detach. DO NOT REPORT `changed` AS A COUNT OF NEW LINKS ON AN ADD. `action: \"add\"` returns `changed: null` because the insert is idempotent and how many links were actually new is not knowable without a second read — `null` means \"not measured\". It is not zero, and it is NOT the number of keyword IDs submitted. `action: \"remove\"` returns a real `changed` count. When asked how many keywords were touched, report `keywordCount`: the tracked keywords the action was applied to, after de-duplication. Both actions return `keywordCount: 0` with `changed: 0` when none of the submitted IDs belong to this tracker — a no-op, not a tagging worth reporting as done."
+    },
+    {
+      "name": "get_brave_search_rank_check",
+      "description": "Checks where a project's domain (or an explicit targetDomain) ranks in REAL Brave Search results for one keyword. Brave has run its own independent crawler and index since 2023 — a genuinely separate, separately-licensed data source, distinct from this server's free SearXNG/openserp-backed rank checks. Every successful response carries engine: 'brave_search' so it can never be mistaken for a free-tier number. PAID: bring-your-own-key — requires the deployment operator to set BRAVE_SEARCH_API_KEY (a single paid credential, like OPENPAGERANK_API_KEY — no OAuth flow). Every call spends that key's Brave Search API budget. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_domain' when neither targetDomain nor the project's own domain is set. Makes exactly one Brave Search API call per check — depth (max 20) is Brave's own per-request ceiling, never paginated to search deeper. Brave publishes no submission/indexing API at all, only manual re-fetch/delist web forms — this tool is query-only."
+    },
+    {
+      "name": "create_rank_tracker",
+      "description": "Creates a rank tracker config (domain + market + devices + schedule) for a project and returns its configId. Next, add keywords with add_rank_tracking_keywords. Positions are collected by the SCHEDULED check ('daily' or 'weekly'; 'manual' means never on a schedule) and read with get_rank_tracker — nothing here triggers a check on demand. One tracker per (domain, market) per project: repeating a pair is a validation error, not a second tracker. FREE at creation: database only, no credits spent."
+    },
+    {
+      "name": "list_rank_tracking_keywords",
+      "description": "Lists the keywords tracked by ONE rank tracker: `{ keywords, totalCount, page, pageSize }`, each row `{ id, configId, keyword, searchVolume, keywordDifficulty, cpc, metricsFetchedAt, createdAt }`. It returns NO positions and runs no check — read positions with get_rank_tracker. The row `id` is the tracking-keyword ID that remove_rank_tracking_keywords, update_rank_keyword_tag and set_rank_keyword_target_url take. FREE: database only."
+    },
+    {
+      "name": "remove_rank_tracking_keywords",
+      "description": "Removes keywords from a rank tracker by their tracking-keyword IDs (from list_rank_tracking_keywords). The keywords stop being checked; their past position snapshots are deliberately kept, so history survives. FREE: database only."
+    },
+    {
+      "name": "start_site_audit",
+      "description": "Starts a MisarSEO site crawl/audit from startUrl. Returns `{ jobId, auditId }` (the same id twice) with HTTP 202; the crawl then runs in the background — poll it with get_site_audit_status. FREE of SEO credits, but it CONSUMES ONE of the organization's monthly audits from its plan quota (a spent quota is a plan-limit error), so confirm with the user before starting one and never start one speculatively."
+    },
+    {
+      "name": "get_site_audit_status",
+      "description": "Progress of a site audit started by start_site_audit: `{ status, pagesCrawled, pagesTotal, lighthouseTotal, lighthouseCompleted, lighthouseFailed, currentPhase, startedAt, completedAt }`. `status` is 'running', 'completed' or 'failed' — poll until it is 'completed' or 'failed'; there is no 'complete' status, so waiting for that string never ends. It does NOT return crawled pages or individual issues. Once completed, read it with get_audit_comparison, get_audit_core_web_vitals, get_audit_https_report, get_audit_internal_links and get_audit_structured_data. FREE."
+    },
+    {
+      "name": "get_audit_comparison",
+      "description": "Compare a site audit against an earlier one: which issues are new, which were fixed, how many persist, and the health-score delta. Only pages BOTH crawls visited are compared, so a shorter crawl never reports the pages it missed as fixed — those are reported separately as notComparableCount. `newIssues` only ever covers an existing page newly showing a finding, never a brand-new page's own findings (those fold into notComparableCount/addedUrlCount instead, since a page neither crawl could compare has no meaningful 'new' vs. 'always there' answer). Returns an error when there is no earlier completed audit to compare against. Free — charges no credits."
+    },
+    {
+      "name": "get_audit_core_web_vitals",
+      "description": "Core Web Vitals report: LCP/INP/CLS per page/strategy this audit already ran Lighthouse against, classified against Google's own published thresholds. No new fetch — reads audit_lighthouse_results, the same table the results UI already renders as raw numbers. LAB DATA ONLY, never Search Console's real Chrome UX Report (CrUX) field data — every number is a single simulated Lighthouse run, not an aggregated real-user measurement. This codebase's audit pipeline runs local headless Chrome as its PRIMARY path, so CrUX field data is not reliably available for any given page. ALWAYS narrow on `state` first: `no_lighthouse_data` (this audit has no Lighthouse rows at all — an absence of data, NOT every page passing) or `analysed`. Errors when no audit with that id belongs to the project. `pages[].allGood` is true only when all three metrics were measured AND all three are \"good\". Free — charges no credits."
+    },
+    {
+      "name": "get_audit_https_report",
+      "description": "HTTPS Report: percentage of pages secure, mixed-content and insecure-link counts, homepage HTTPS-path status, and HTTP URLs in an HTTPS site's sitemap — for a project's latest completed crawl (or a named earlier one). Derives entirely from already-computed crawl data — no new work at read time. SOCKET-LEVEL TLS CHECKS STAY EXPLICITLY UNBUILT: expiring/expired certificate, old security protocol, incorrect certificate name, and subdomains without SNI/HSTS all need a real TLS handshake this fetch-based crawler does not make. `notDerivable` lists these with the reason. `homepageStatus.redirectsToHttps` is null (not measured), never assumed healthy, unless a standalone fetch actually observed a failure — this report cannot distinguish \"checked and fine\" from \"never checked\" from stored issue rows alone. ALWAYS narrow on `state` first: `no_audit` (no completed crawl yet), `analysed`. Free — charges no credits, makes no external call."
+    },
+    {
+      "name": "get_audit_internal_links",
+      "description": "Internal Link Report: outbound/inbound internal link counts per page, orphan pages, dead ends, and click-depth distribution for a project's latest completed crawl (or a named earlier one). No new computation — reads the same audit_pages/audit_issues columns already powering the in-app internal-links page. INTERNAL LINKS ONLY. External links are explicitly out of scope: an external link graph needs data this codebase does not collect. `totals.externalLinkOccurrences` is the one external-facing number here — a raw per-page outbound tally, never a graph. ALWAYS narrow on `state` first: `no_audit` (no completed crawl yet), `signal_not_captured` (a crawl exists but its link counts predate the inbound-link/click-depth migration or were otherwise never computed — an absence of data, NOT a site with no internal links), `analysed`. `notDerivable` is returned with every state and lists what this report can never compute from what is stored, and why. Free — charges no credits, makes no external call."
+    },
+    {
+      "name": "get_audit_structured_data",
+      "description": "Structured Data Report: pages grouped by schema.org @type, which pages have none, and which pages carry an unparseable JSON-LD block — for a project's latest completed crawl (or a named earlier one). Derives entirely from structured data already extracted at crawl time — no new crawl-time work. PRESENCE AND PARSE VALIDITY, NOT A RICH-RESULTS ELIGIBILITY CHECK. Only `typeGroups[].invalidCount` on the BreadcrumbList group is a real, verified per-type validity verdict; every other type reports only whether pages declare it and whether ANY block on the page failed to parse (page-level — never attributable to one type when a page declares several). ALWAYS narrow on `state` first: `no_audit` (no completed crawl yet), `analysed` (`typeGroups: []` means every page was measured and none declared any structured data — a real finding, not a withheld section). `notDerivable` lists what this report can never compute, and why. Free — charges no credits, makes no external call."
+    },
+    {
+      "name": "get_search_console_performance",
+      "description": "Query the connected Search Console property's Search Analytics: clicks, impressions, CTR, and average position by query/page/country/device/date. First-party data — use it for what already ranks, near-ranking queries, and pages with real demand. ctr is a 0-1 fraction; position is a 1-based average; dates are Pacific Time; the last ~3 days may be incomplete. Read-only and FREE (no credits) — Search Console is first-party data and meters nothing. It does spend Google's per-property request quota. Google omits rows it will not disclose (anonymised queries) and returns at most `rowLimit` of the rest, so what it withholds is not measured rather than absent: zero rows is not zero demand, and a total summed from these rows is a floor, never the property's real total. When `hasMore` is true you have seen only part of the match set — page with `startRow` before reporting any sum or count as complete."
+    },
+    {
+      "name": "inspect_urls",
+      "description": "Run Google Search Console's URL Inspection on up to 10 URLs of the connected property: index/coverage state, last crawl time, Google-selected vs declared canonical, and mobile/rich-results verdicts. Use it to answer 'is this page indexed? why not?'. Read-only and FREE (no credits) — Search Console is first-party data and meters nothing. Every submitted URL comes back as a row, but a row carrying `error` was NOT inspected: Google refused or failed on it, so its index state was not measured rather than found to be bad. Count the rows without an `error` when saying how many URLs you checked. A verdict of UNKNOWN is Google's own 'no determination', not a page that is missing from the index."
+    },
+    {
+      "name": "get_search_console_coverage",
+      "description": "MisarSEO's own index-coverage report for the connected property: which URLs are indexed, excluded, or errored, and why. FREE (no credits) and makes NO call to Google — unlike get_search_console_performance, this reads `gscUrlCoverage`, populated by a nightly scan built on the URL Inspection API's ~2000/day quota, so coverage fills in over days rather than in one pass. `summary` is the headline count per coverageState. `rows` is one page (default 200, max 1000) of the URLs themselves, newest-inspected first — filter to one state with `coverageState`. An empty summary/rows with ok: true means the nightly scan has not populated this property yet, not that every page is fine."
+    },
+    {
+      "name": "get_search_console_hourly_performance",
+      "description": "MisarSEO's own retained HOURLY Search Console totals for the connected property — the hourly counterpart to get_search_console_performance's daily archive. FREE (no credits) and makes NO call to Google: reads MisarSEO's own Postgres. Unlike the daily archive, a wider date range does not mean more history — Google itself only offers roughly the trailing 8-10 days of hourly data, and the nightly sync only ever fetches that same window, so a startDate earlier than it simply returns nothing for the days outside it. Each row's `hour` is 0-23 in Search Console's own America/Los_Angeles reporting hour."
+    },
+    {
+      "name": "get_search_console_sitemaps",
+      "description": "Search Console sitemaps.list/sitemaps.get: every sitemap submitted for the connected property and its processing status (pending, last downloaded, warning/error counts, per-content-type submitted counts), or one named sitemap. Read-only — needs only the `webmasters.readonly` scope this deployment's Search Console connection already requests. Submit/delete need the broader `webmasters` scope and are deliberately not offered. Free (no credits) but spends one call of Google's per-property quota. Omit `feedpath` to list every sitemap; pass one (a sitemap's own URL) to fetch just that one instead — either way the response is `sitemaps`, a one-entry array for `feedpath`. `lastSubmitted`/`lastDownloaded`/`warnings`/`errors` are absent, not zero, when Google has nothing to report for that field."
+    },
+    {
+      "name": "get_gsc_ctr_by_position",
+      "description": "CTR by ranking position: the site's own historical Search Console clicks/impressions bucketed by position (1-3, 4-10, 11-20, 21+ — mirroring this codebase's existing rank-tracking position-distribution buckets), with the REAL clicks-weighted CTR this project achieved at each bucket. NEVER a fabricated industry-average CTR curve (the generic 'position 1 gets X% CTR' tables third-party vendors publish) — every figure is computed from this project's own archived Search Console history. Free and makes NO live Google call: reads only the archive `get_content_decay_report` also reads. ALWAYS narrow on `state` first: `not_connected` (connect a property), `no_data` (a property is bound but the archive has no rows at all for this dimension/window — an absence of data, NOT zero traffic), `analysed`."
+    },
+    {
+      "name": "get_gsc_anonymous_queries",
+      "description": "Anonymized-query estimate: Search Console omits some rare queries entirely from a query-dimensioned response to protect searcher privacy (Google's own documented behaviour, not this codebase's assumption). This compares the SUM of named per-query clicks/impressions against the property's TRUE undimensioned total for the same window — the gap is a real, derived anonymized-query volume. Charges no credits but spends TWO Search Console requests of Google's per-property quota per call. ALWAYS narrow on `state` first: `not_connected`, `requires_reconnect` (the bound property's Google grant can no longer be used), `no_search_data` (Search Console returned nothing for the window — an absence of data, NOT zero anonymization), `analysed`. On `analysed`, ALWAYS check `possiblyRowCapped`: when true, part of the gap is queries the 1,000-row named-query fetch did not reach, not privacy anonymization — the estimate then overstates true anonymization."
+    },
+    {
+      "name": "get_cannibalisation_report",
+      "description": "Finds the queries where the project's connected Search Console property competes with itself: two or more of its own pages drawing impressions for the same query, splitting that query's clicks, click signals and ranking history across URLs. Read-only and FREE (no credits) — Search Console is first-party data and meters nothing. It does spend Google's per-property request quota, so it is rate limited per user. Requires Search Console to be connected for the project. Returns exactly ONE of four states, which are four different facts — branch on `state` before reading anything else: `not_connected` (nothing is bound; tell the user to connect a property), `requires_reconnect` (bound but the Google grant is revoked/expired; tell the user to reconnect), `no_search_data` (Search Console returned nothing for the window — an absence of data, NOT a clean bill of health), `analysed` (we looked; `findings` may legitimately be empty and `coverage` is the proof, including `truncated` when the property had more rows than one report can fetch). In each of the first three states nothing was measured at all, so never report any of them as 'no cannibalisation found'. Every per-page figure is Search Console's own for that (query, page) pair — ctr is a 0-1 fraction, position is a 1-based average, dates are Pacific Time and the last ~3 days are excluded for data lag. `thresholds` ships with each analysed report so you can say whether a threshold, rather than the absence of a problem, is why a query is missing."
+    },
+    {
+      "name": "get_content_decay_report",
+      "description": "Finds pages whose clicks declined by a meaningful amount between two adjacent windows, read entirely from MisarSEO's own archived Search Console history (the top-200-per-day per-page archive the nightly sync fills in). Read-only and FREE (no credits), and makes NO live Search Console call — unlike get_cannibalisation_report, this spends no Google quota, so it is rate limited only against ordinary abuse. Requires Search Console to be connected for the project. Returns exactly ONE of three states, which are three different facts — branch on `state` before reading anything else: `not_connected` (nothing is bound; tell the user to connect a property), `insufficient_history` (bound, but one of the two comparison windows has no archived rows at all — an absence of data, NOT a clean bill of health), `analysed` (we looked; `findings` may legitimately be empty and `coverage` is the proof). In both of the first two states nothing was measured, so never report either as 'no content decay found'. `window` selects the RECENT period length; the EARLIER period compared against it is the same length immediately before it, not a calendar-month split. `minEarlierClicks` (default 10) and `declineThresholdPct` (default 20) are this codebase's own chosen defaults, not a published vendor formula. A page that fell out of the archive's top-200-per-day entirely reports `recentClicks: 0` — correctly the most severe decay, not a data hole."
+    },
+    {
+      "name": "get_backlinks_overview",
+      "description": "Returns a backlinks profile summary (total backlinks, referring domains, referring pages, rank) plus the top referring domains by backlink count. CHARGES CREDITS ON THE PAID DATA PROVIDER (~200-500 typical): two lookups per call, the summary and one page of referring domains. UNAVAILABLE ON THE DEFAULT FREE DATA PROVIDER: a backlink graph needs a proprietary web-scale crawl index, so every method of this surface throws SEO_DATA_UNAVAILABLE there and nothing is charged. That error means the question was never asked — never report it as a site with no backlinks. Self-hosted deployments also need the Backlinks API enabled on their DataForSEO account. The two halves count DIFFERENT populations: the summary totals are unfiltered, while the referring-domain list has domains above the spam-score threshold filtered out. Do not present the listed domains as the top slice of the summary total, and do not subtract one from the other."
+    },
+    {
+      "name": "get_link_intersect",
+      "description": "Finds the domains that link to 2–4 of the project's competitors but NOT to the project itself. Every row is a site that has already demonstrated it will link to something in this space, which is what makes it the most actionable backlink report there is. CHARGES CREDITS — the most expensive call in the backlinks surface: one referring-domains lookup per request, 5 of them paging the project's OWN referring domains plus 1 per competitor, so one run costs up to 9 upstream requests of 1000 domains each. Every request is cached per organization+target+page, so re-running the same intersect with a different threshold, proof filter or sort is FREE — do that rather than issuing a new run, and confirm with the user before sweeping several competitor sets. UNAVAILABLE ON THE FREE DATA PROVIDER: a backlink graph needs a proprietary web-scale crawl index, so a deployment on the free provider answers with `unavailable: true`, a reason, and no rows. `totalRows`, `provenRows` and `unprovenRows` are 0 on that response and are NOT measurements — they travel beside the flag precisely so an empty table is never read as an answer. Check `unavailable` before `rows`, and never report an unavailable run as 'no opportunities exist'. `absence` has two states that must NOT be conflated. `proven` means our own referring-domain read ruled the domain out, so \"does not link to us\" is a measurement. `unproven` means our read was cut off at or above that domain's authority, so it may already link to us and nothing was established — never present an `unproven` row as a confirmed opportunity. `provenRows` is the headline count and excludes them by construction. `absenceBound` says which regime applies: `complete` (our whole profile was read) or `authority-floor` with the `authorityFloor` strictly above which absence is evidence. `coverage[]` is the per-target ledger — `domainsRead`, the provider's `domainsTotal`, `requestsSpent`/`requestBudget`, `truncated`, `authorityFloor`, and a per-target `unavailable`/`unavailableReason`. A competitor cell's `found: false` only means 'does not link to them' when that competitor's coverage is not `truncated`. The project's own domain is read from the project record and cannot be passed in — if the project has no domain the call fails with a validation error telling the user to set one. `minCompetitors` is clamped to the number of competitor domains that actually resolved (duplicates and the project's own domain are dropped); compare it with `minCompetitorsRequested` before calling a run empty. At most 200 rows are returned; `totalRows` is the real match count. There is deliberately no composite opportunity score and no subdomain toggle."
+    },
+    {
+      "name": "list_disavow_entries",
+      "description": "Disavow file management: every disavow entry for a project, oldest first. FREE (no credits). Use export_disavow_file to get the actual Google-format .txt content."
+    },
+    {
+      "name": "add_disavow_entry",
+      "description": "Disavow file management: mark one URL or domain for disavowal. FREE (no credits), but this is a MUTATION. entryType 'url' disavows exactly that page (value must be a full absolute URL); entryType 'domain' disavows the whole domain AND its subdomains (value is a bare host, no scheme) — per Google's own documented disavow-file format, there is no way to disavow just a subpath."
+    },
+    {
+      "name": "remove_disavow_entry",
+      "description": "Disavow file management: remove one disavow entry by id (from list_disavow_entries). FREE (no credits), but this is a MUTATION. Succeeds whether or not entryId existed."
+    },
+    {
+      "name": "export_disavow_file",
+      "description": "Disavow file management: export a project's disavow entries as the exact .txt content Google's disavow tool accepts (support.google.com/webmasters/answer/2648487) — one bare URL per line to disavow that exact page, or `domain:<host>` to disavow an entire domain and its subdomains. FREE (no credits). Save `fileContent` to a .txt file as-is (UTF-8)."
+    },
+    {
+      "name": "get_backlink_anchors",
+      "description": "Anchor-text distribution for a domain or URL, one page at a time: which anchor texts link to it, with backlinks, referring domains, referring pages and dofollow links per anchor. This is what reveals an over-optimised profile (one exact-match commercial phrase dominating) or a hacked one (pharma/casino anchors nobody wrote) — both invisible link by link. CHARGES CREDITS ON THE PAID DATA PROVIDER (~200-500 typical). UNAVAILABLE ON THE DEFAULT FREE DATA PROVIDER, like the rest of the backlinks surface: SEO_DATA_UNAVAILABLE there means the question was never asked, never an empty distribution. There is deliberately no spam-score column — an averaged spam score is not a spam score."
+    },
+    {
+      "name": "get_content_optimizer_report",
+      "description": "On-page recommendations and an AI content grade for one page, benchmarked against the pages currently ranking for its target keyword, built together — one AI-gateway call produces both the grade and the recommendations). CHARGES ONE AI-gateway operation against the organization's shared monthly ceiling — not a plan-quota dimension of its own. The page crawl (target + up to 5 competitors) and the SERP fetch are both free. `url` does not have to belong to the project's own domain or to a page a site audit has crawled — any http(s) URL is graded fresh. ALWAYS narrow on `state` first: `target_unreachable` means the target page itself could not be fetched — an ordinary outcome, never treat it as 'this page scored zero'. `analysed` carries the full report; check `coverage.serpUnavailable` and `competitorsCrawled` before trusting the competitor comparison. `grade` is an AI-generated qualitative read of the measured signals, NOT a calibrated industry score. Does NOT detect AI-written content — that is not built; no reliable free technique exists for it."
+    },
+    {
+      "name": "get_content_page_metrics",
+      "description": "Lightweight on-page metrics for one arbitrary URL — the content optimizer's keyword-free, AI-free sibling. Built for ambient per-page checks (e.g. the browser extension's on-page panel checking whatever page the user is currently viewing) with none of `get_content_optimizer_report`'s cost: no keyword required, no AI-gateway charge, no competitor crawl or SERP fetch. `url` does not have to belong to the project's own domain — any http(s) URL is analyzed fresh. ALWAYS narrow on `state` first: `unreachable` means the page itself could not be fetched — an ordinary outcome for an arbitrary URL check, never treat it as an error."
+    },
+    {
+      "name": "run_brand_radar_scan",
+      "description": "Scans real AI-answer engines and search citations for brand mentions, Share of Voice against named competitors, and cited sources. REQUIRES A PAID PLAN — a free-tier organization gets a plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly Brand Radar scan allowance PLUS one shared AI-gateway operation, both charged BEFORE the scan runs. The allowance is spent when the scan is ACCEPTED, before any answer exists — every call submits a new scan, so ask before re-running one. The scan runs on a background queue: this tool waits up to ~45 seconds for it and returns the result when it completes; if it is still running it returns the `jobId` instead — collect the result with get_brand_radar_scan_status (free to poll) rather than calling this tool again, which would spend another scan. Mentions and AI search volumes are nullable: a null is 'not reported by the platform', never 0."
+    },
+    {
+      "name": "get_brand_radar_scan_status",
+      "description": "Status of a Brand Radar scan started by run_brand_radar_scan, by its `jobId`. `status` is queued/running/complete/errored; a complete scan carries the shaped `result` (share of voice, top cited pages, top prompts), an errored one carries `error.message`. FREE to poll: a completed scan re-reads the cached result and charges nothing. The one exception is a scan whose cached result has already expired (older than ~24h) — answering that re-runs the lookup and is charged and rate limited like a new scan, so collect results promptly. Use this instead of re-running run_brand_radar_scan, which always spends another monthly scan."
+    },
+    {
+      "name": "explore_ai_prompt",
+      "description": "Runs one prompt through up to 4 model personas and returns each answer verbatim, with real citations when webSearch is on. The four persona labels (chat_gpt/claude/gemini/perplexity) are NOT vendor-verified — none is guaranteed to be that vendor's own model; 'claude' and 'perplexity' in particular have no real vendor route at all. Treat every answer as 'a model answering as X', never as ground truth from X. REQUIRES A PAID PLAN and CHARGES one shared AI-gateway operation per call (not per model) — plus one more if analyzeSentiment and highlightBrand are BOTH set."
+    },
+    {
+      "name": "research_ai_prompts",
+      "description": "Turns a seed topic into candidate prompts worth tracking (real Google/Bing autocomplete completions reframed as questions) plus observed mention-rate signals from this project's own already-tracked prompts. This is NOT prompt search volume — no honest corpus of 'how many people ask this' exists anywhere this codebase can reach, so no volume or difficulty number is invented. FREE: no AI-gateway budget, no paid-plan gate, no credits spent."
+    },
+    {
+      "name": "compare_ai_competitor_positioning",
+      "description": "Runs ONE prompt through the explore_ai_prompt pipeline and checks a brand plus its named competitors against the SAME real per-model answers for mentions and citations. Bounded scope, stated plainly: this is what one prompt's observed answers show for the named entities — never a comprehensive cross-prompt visibility score. `mentionedByCount` / `citedByCount` are raw counts out of `successfulModelCount`, never a percentage or ranking. `entities[0]` is always the target brand; the rest are the competitors in submitted order. A model that failed upstream reports `status: \"error\"` with `mentioned`/`cited: null` for every entity — null, not false, because that model was never checked. REQUIRES A PAID PLAN and CHARGES the same as explore_ai_prompt for the requested models; comparing more competitors against that one set of answers costs nothing extra."
+    },
+    {
+      "name": "get_direct_vendor_answers",
+      "description": "Runs a prompt against up to 5 REAL, directly-verified vendor models — you_com (You.com Answer API), deepseek, grok (xAI), meta_ai (Meta's Model API) and minimax — each called through that vendor's own public API. Unlike explore_ai_prompt's persona labels, every result here reports the real vendor model id in `modelName`. A model whose API key is not configured on this deployment answers `status: \"unavailable\"` with no call made — a deployment fact, not an error; `status: \"error\"` means the vendor is configured but the call failed. `webSearch` is best-effort per vendor: You.com is always grounded, grok honours it, and deepseek, meta_ai and minimax always answer `webSearch: false`. meta_ai is a US-developers-only public preview, so an ineligible account reports an error naming that. Billed on the operator's own vendor keys: no plan gate and no MisarSEO credits are spent."
+    },
+    {
+      "name": "get_brand_scan_trend",
+      "description": "The recorded AI-visibility history for one brand or domain: mentions, cited sources and competitors seen at each past Brand Radar scan, oldest first. Answers whether visibility in AI answers is moving, which a single run_brand_radar_scan cannot. Returns only scans that actually ran — empty for a target never scanned, filling in as scans run, with nothing interpolated or back-filled. FREE — reads recorded scans, charges no credits."
+    },
+    {
+      "name": "list_brand_monitors",
+      "description": "Lists a project's brand monitors — targets re-scanned by Brand Radar on a schedule rather than only when run_brand_radar_scan is called. FREE: database only, no credits spent."
+    },
+    {
+      "name": "upsert_brand_monitor",
+      "description": "Creates or replaces a brand monitor — the whole schedule and competitor list, not single fields. Requires the admin role in the calling organization, because it starts UNATTENDED RECURRING spend from the SAME monthly Brand Radar scan quota that run_brand_radar_scan uses, which can leave less quota for ad hoc scans that month. Confirm the schedule with the user before calling."
+    },
+    {
+      "name": "delete_brand_monitor",
+      "description": "Deletes a brand monitor, stopping its scheduled scans. Requires the admin role in the calling organization. Get the monitorId from list_brand_monitors."
+    },
+    {
+      "name": "list_tracked_prompts",
+      "description": "Lists a project's tracked prompts — prompts re-run through explore_ai_prompt's real answer pipeline on a schedule and diffed against the previous check for mention/citation drops. FREE: database only, no credits spent."
+    },
+    {
+      "name": "upsert_tracked_prompt",
+      "description": "Creates or replaces a tracked prompt — the whole model list and schedule, not single fields. On every scheduled check the SAME prompt is re-run (grounded, for real citations) and diffed against the previous check. Requires the admin role in the calling organization, because it starts UNATTENDED RECURRING spend from the shared AI-gateway monthly budget. Confirm the schedule and models with the user before calling."
+    },
+    {
+      "name": "delete_tracked_prompt",
+      "description": "Deletes a tracked prompt, stopping its scheduled checks. Requires the admin role in the calling organization. Get the trackedPromptId from list_tracked_prompts."
+    },
+    {
+      "name": "get_tracked_prompt_trend",
+      "description": "Observed history for one tracked prompt — one point per real scheduled check (`mentionedByCount`/`citedByCount` out of `successfulModelCount`), oldest first. Empty until checks accumulate; never interpolated or back-filled. FREE — reads recorded checks."
+    },
+    {
+      "name": "get_unlinked_mentions_report",
+      "description": "Unlinked brand mentions: searches the free SERP backend for `brand` as a QUERY, then checks whether each result page already links to `trackedDomain`. Free: one SERP fetch plus up to 10 live third-party page fetches, no AI-gateway spend. ALWAYS narrow on `state` first: `serp_unavailable` means no free SERP provider could be reached — never treat it as \"zero mentions found\". `analysed` carries `candidates[]`, each `status: \"linked\" | \"unlinked\" | \"unreachable\"`. Bounded by SERP result count (the first page or two of free-SERP results), never an exhaustive web crawl or a full content index — the Common Crawl-based version of this gap is a decided wont-fix; `scopeNote` states this on every response. `candidates[].platform` reuses the AI-citation platform classification (YouTube/TikTok/Reddit/Wikipedia/LinkedIn/Quora, or null) at no extra cost."
+    },
+    {
+      "name": "get_media_monitoring_report",
+      "description": "Media Monitoring: get_unlinked_mentions_report's candidates filtered to known social/forum/news platform domains, optionally merged with the citation-platform breakdown from a Prompt Explorer scan you already ran for the same brand. Same cost profile as `get_unlinked_mentions_report`, which this calls internally — no AI-gateway spend, even when `citations` is supplied (that data is only classified here, never fetched). NOT a real-time media-monitoring product: no social-platform API polling, no forum-API crawling, no news-aggregator feed — `scopeNote` states this on every `analysed` response. ALWAYS narrow on `state` first, same as `get_unlinked_mentions_report`. `aiCitationPlatforms: null` means no `citations` were supplied — distinct from an empty array, which would mean a scan cited nothing on a known platform."
+    },
+    {
+      "name": "search_local_businesses",
+      "description": "Searches local business listings near a coordinate. Use this to find local business candidates or nearby competitors; it does not run Maps rank checks or Q&A. CHARGES CREDITS ONLY WHEN APIFY IS CONFIGURED AND ITS SHARED MONTHLY BUDGET HAS ROOM: results then come from a real, independently-run scrape of Google Places (`dataSource: \"apify_google_places\"`) — real ratings, since OpenStreetMap never has one. Otherwise (Apify unconfigured, over budget, or the actor call failed) NOTHING IS CHARGED and this falls back automatically to OpenStreetMap (Overpass, then Nominatim) — real point-of-interest data, no key (`dataSource: \"openstreetmap\"`) — whose coverage is uneven and carries none of a commercial directory's ranking, review or category metadata. Do not present an OpenStreetMap result set as the complete set of businesses in the area; the response's own `dataSource` field on each row says which source actually answered it, never assume. `categories` values are common category names (e.g. 'restaurant', 'dentist'); OpenStreetMap matches them on a best-effort basis, so a category that returns nothing on that path may simply be unmapped there rather than absent from the area — an empty result is not measured coverage of the area, and a listing's missing rating or review count is likewise not measured, never zero."
+    },
+    {
+      "name": "get_google_business_questions",
+      "description": "Fetches question-and-answer rows for one business keyword. Run this only when Q&A evidence is needed. THE TWO PROVIDERS RETURN DIFFERENT THINGS AND YOU MUST SAY WHICH YOU HAVE. On the paid data provider these are real Google Business Profile questions and answers for a profile near `near`, and it CHARGES CREDITS. On the default free provider they are Google/Bing autocomplete completions reframed as questions — real search phrasings, but NOT anybody's Business Profile Q&A, with no answers and no asker — and NOTHING IS CHARGED. Never attribute a free-provider row to a business or quote it as a customer's question. `near` IS IGNORED ON THE FREE PROVIDER: the suggest APIs take no geography, so the same keyword returns the same rows from any coordinate. It is required because the paid provider needs it, not because the result is always localised. On the paid provider `radiusKm` is converted to metres and clamped into 200 m - 199,999 m, so a radius above about 200 km is silently reduced to that ceiling. An empty result means no Q&A was found for this phrasing; whether the business has questions elsewhere was not measured."
+    },
+    {
+      "name": "run_local_nap_audit",
+      "description": "Compare a claimed business Name/Address/Phone against listings the free OpenStreetMap business search finds near the claimed location. PARTIAL scope: checks ONE open source, not a multi-directory citation crawl (a multi-directory crawl needs licensed directory-API access this deployment does not have). A found field with no value is reported notComparable, never scored as a mismatch. `overallScore` on each match is a mean of comparable-field similarities (0-1), null when nothing was comparable."
+    },
+    {
+      "name": "get_local_pack_rank",
+      "description": "Read-only access to local pack rank check configs and their latest check. With `configId`, returns that config's latest check: `status` is \"found\" (a real 1-based `position` within Google's local pack), \"not_found\" (the page parsed cleanly but the business was not among the entries seen), or \"unavailable\" (the scraper is disabled, blocked, or nothing could be parsed) — never a fabricated position or confidence score. Without `configId`, lists all local pack rank configs in the project. This checks Google's LOCAL PACK for a named BUSINESS, distinct from get_local_rank_grid, which checks ORGANIC rank for a DOMAIN across a geo-grid. Create a config with create_local_pack_rank_config and run a new check with run_local_pack_rank_check."
+    },
+    {
+      "name": "get_local_rank_grid",
+      "description": "Read-only access to geo-grid rank-tracking configs and their latest run. With `configId`, returns that config's latest run plus per-point results (position, url, and the place name each point was reverse-geocoded to for its location override — null means no override was applied). Without it, lists all grid configs in the project. Reports ORGANIC rank at each point, NEVER local-pack position — the free SERP backend does not parse a local pack. Create a config with create_local_rank_grid_config and trigger a run with run_local_rank_grid."
+    },
+    {
+      "name": "get_gbp_profile",
+      "description": "Read-only Google Business Profile listing profile for the project's linked location: title, categories, phone, website, description, hours-period count, and which of Google's attribute taxonomy entries are set. Fetched LIVE from Google on every call. Returns NOT_FOUND if no location is linked yet — link one with set_gbp_connection (list_gbp_locations has the ids)."
+    },
+    {
+      "name": "get_gbp_performance",
+      "description": "Read-only Business Profile Performance API metrics for the project's linked location over an inclusive date range. `metrics` must be real DailyMetric values: BUSINESS_IMPRESSIONS_DESKTOP_MAPS, BUSINESS_IMPRESSIONS_DESKTOP_SEARCH, BUSINESS_IMPRESSIONS_MOBILE_MAPS, BUSINESS_IMPRESSIONS_MOBILE_SEARCH, BUSINESS_CONVERSATIONS, BUSINESS_DIRECTION_REQUESTS, CALL_CLICKS, WEBSITE_CLICKS, BUSINESS_BOOKINGS, BUSINESS_FOOD_ORDERS, BUSINESS_FOOD_MENU_CLICKS."
+    },
+    {
+      "name": "get_gbp_reviews",
+      "description": "Read-only reviews for the project's linked Google Business Profile location, one Google-paginated page at a time."
+    },
+    {
+      "name": "reply_to_gbp_review",
+      "description": "Reply to (or overwrite the reply on) one review, by reviewId from get_gbp_reviews. Google's endpoint has no separate create/update — this always overwrites. Publishes immediately; there is no draft/preview step."
+    },
+    {
+      "name": "get_gbp_optimization",
+      "description": "Completeness/quality score and AI-grounded optimization recommendations for the project's linked Google Business Profile location. The `score` (0-100) is a DETERMINISTIC heuristic checklist over real measured facts — not AI-generated. Only `recommendations` comes from the model. CHARGES ONE AI-GATEWAY OPERATION against the organization's shared monthly ceiling."
+    },
+    {
+      "name": "list_gbp_locations",
+      "description": "Every Google Business Profile account and location this deployment's operator credential can manage — the picker data for set_gbp_connection. Not project-scoped data (the answer does not depend on the project passed; projectId only satisfies the ownership check). Returns `{ accounts: [{ name, accountName, locations: [...] }] }`. Live Google API calls."
+    },
+    {
+      "name": "get_gbp_connection",
+      "description": "The project's currently linked Google Business Profile location, or `{ connection: null }` when none is linked yet. FREE: database only."
+    },
+    {
+      "name": "set_gbp_connection",
+      "description": "Links (or repoints) a project to a Google Business Profile location. Take googleAccountId and googleLocationId verbatim from list_gbp_locations — both are Google's own resource names (e.g. \"accounts/123\", \"locations/456\"), not free text. Repointing replaces the existing link."
+    },
+    {
+      "name": "disconnect_gbp",
+      "description": "Removes the project's link to its Google Business Profile location. Only MisarSEO's own record of the link is removed — the location on Google is untouched — but every GBP tool stops working for the project until it is linked again."
+    },
+    {
+      "name": "list_gbp_posts",
+      "description": "Posts published on the project's linked Google Business Profile location. A 404 means no location is linked — use set_gbp_connection first."
+    },
+    {
+      "name": "create_gbp_post",
+      "description": "Publishes a new \"What's New\" post on the linked Google Business Profile location. It goes LIVE and PUBLIC immediately — there is no draft state and no undo here. Show the user the exact text and get their explicit approval before calling. Only standard posts are supported (no event, offer or alert fields)."
+    },
+    {
+      "name": "delete_gbp_review_reply",
+      "description": "Removes the owner's published reply from one Google review (reviewId from get_gbp_reviews). The removal is public and immediate. Confirm with the user before calling."
+    },
+    {
+      "name": "create_local_pack_rank_config",
+      "description": "Creates a local pack rank check config: where businessName sits in Google's local pack for one keyword at one location. The location is composed into the query as \"<keyword> in <locationLabel>\" — not geocoded. Run checks with run_local_pack_rank_check and read them with get_local_pack_rank. FREE: database only."
+    },
+    {
+      "name": "delete_local_pack_rank_config",
+      "description": "Deletes a local pack rank check config, INCLUDING its whole check history. Confirm with the user before calling."
+    },
+    {
+      "name": "run_local_pack_rank_check",
+      "description": "Runs a local pack rank check now — one live scrape of Google's public local search results (not the paid Places API). Returns \"found\" with a real 1-based position, \"not_found\" (parsed cleanly, business absent), or \"unavailable\" (scraper disabled, blocked, or unparsable) — never a fabricated position. Fails with SEO_DATA_UNAVAILABLE where the deployment has not enabled the scraper. Tightly rate limited, so do not loop it."
+    },
+    {
+      "name": "create_local_rank_grid_config",
+      "description": "Creates a geo-grid rank-tracking config: a 3x3 grid of points around a centre coordinate, checking ORGANIC rank for one keyword and domain from each point. centerLabel must name the place the grid is centred on — a heatmap with no stated centre is a claim about nowhere. Run it with run_local_rank_grid and read it with get_local_rank_grid. FREE: database only."
+    },
+    {
+      "name": "delete_local_rank_grid_config",
+      "description": "Deletes a geo-grid rank-tracking config, INCLUDING its whole run and point history. Confirm with the user before calling."
+    },
+    {
+      "name": "run_local_rank_grid",
+      "description": "Runs a geo-grid rank check now — up to 9 live SERP calls plus up to 9 reverse-geocode calls. Reports ORGANIC rank at each grid point, never local-pack position. Fails with SEO_DATA_UNAVAILABLE where the SERP provider cannot override location per point. Tightly rate limited, so do not loop it."
+    },
+    {
+      "name": "get_web_analytics_summary",
+      "description": "Sessions/pageviews/bounce-rate time series for a project's own tracking snippet. FREE — first-party data collected by MisarSEO's own snippet (/api/analytics/snippet.js), never a paid or rate-limited third-party call. `totals.bounceRate` is null (not 0) when there were no sessions in the range."
+    },
+    {
+      "name": "get_web_analytics_top_pages",
+      "description": "Top pages by view count, plus separate entry-page and exit-page breakdowns, for a project's own tracking snippet. FREE, first-party."
+    },
+    {
+      "name": "get_web_analytics_sources",
+      "description": "Referrer/channel/UTM breakdown for a project's own tracking snippet, including AI referral attribution: aiReferral.bySource breaks the ai-referral channel out by assistant (chatgpt/claude/perplexity/gemini/copilot/you/poe). aiReferral.undercountNote is not decoration — industry measurement puts a large share of real AI-assistant referrals arriving with no referrer header at all, landing in the direct channel instead. This number is a measurable floor, never a complete count. FREE, first-party."
+    },
+    {
+      "name": "get_web_analytics_devices",
+      "description": "Device/browser/OS breakdown for a project's own tracking snippet. Every field is derived server-side from the visitor's User-Agent header at collection time. FREE, first-party."
+    },
+    {
+      "name": "list_ga4_properties",
+      "description": "Every GA4 property the caller's connected Google Analytics grant can access — the data source for picking which property to bind to a project (see set_ga4_property). Live call to the Analytics Admin API (accountSummaries.list), not an archive read. Read-only and FREE (no credits). Check `requiresReconnect` before treating an empty `properties` list as 'no properties': true means the stored grant can no longer reach Google Analytics."
+    },
+    {
+      "name": "set_ga4_property",
+      "description": "Link (or repoint) a project's Google Analytics property. `propertyId` is re-validated against the caller's LIVE property list on every call — fails if the property fell out of the connected account's access since it was last listed via list_ga4_properties."
+    },
+    {
+      "name": "disconnect_ga4",
+      "description": "Unlink a project's Google Analytics property. Breaks Analytics data for every member of the organization, not just the caller — requires at least the admin role."
+    },
+    {
+      "name": "get_ga4_performance_summary",
+      "description": "MisarSEO's own retained daily Google Analytics totals for the connected property: sessions, activeUsers, newUsers, engagementRate, bounceRate, conversions, screenPageViews. Read-only and FREE (no credits) — makes NO call to Google, reads only what the nightly sync (04:25 UTC) has archived. A property with no completed sync yet simply has no rows, not stale data."
+    },
+    {
+      "name": "get_ga4_channel_breakdown",
+      "description": "MisarSEO's own retained daily GA4 channel breakdown (sessionDefaultChannelGroup) for the connected property — isolating Organic Search from every other acquisition channel, the SEO-relevant signal GA4 adds beyond Search Console's own click/impression data. Read-only and FREE (no credits), archive-only — same sync/quota story as get_ga4_performance_summary."
+    },
+    {
+      "name": "get_ga4_landing_pages",
+      "description": "MisarSEO's own retained daily GA4 landing-page breakdown for the connected property: sessions/engagement/conversions per landing page, ordered by sessions descending within each day. Read-only and FREE (no credits), archive-only — same sync/quota story as get_ga4_performance_summary."
+    },
+    {
+      "name": "log_analyzer_list_uploads",
+      "description": "A project's server-log uploads and their parse status — the Log File Analyzer / Bot Analytics feature. Each row is `{ id, fileName, sizeBytes, status, lineCount, parsedLineCount, skippedLineCount, errorMessage, createdAt, completedAt }`. `status` is one of queued/parsing/completed/failed. lineCount/parsedLineCount/skippedLineCount are null until parsing completes — an absent count is not zero. FREE (no credits). Pair with log_analyzer_upload to add a log, log_analyzer_daily_summary / log_analyzer_top_paths for the report."
+    },
+    {
+      "name": "log_analyzer_upload",
+      "description": "Upload a server access log for background parsing (Log File Analyzer / Bot Analytics). Only Apache/Nginx Combined Log Format text is supported. Pass the raw log text in `content`; parsing runs in the background, so this returns once the upload is stored, before it is fully processed — poll log_analyzer_list_uploads for status. Requires the `admin` role. Plan-tier gated: the deployment's tier caps lines processed per upload and uploads per month. Practical limit: tool calls carrying megabytes of text are impractical — prefer the web UI for large logs. FREE (no credits)."
+    },
+    {
+      "name": "log_analyzer_daily_summary",
+      "description": "Bot hit counts per (day, bot category, bot label, status code, content-type bucket) across every log upload in the date range — powers a time-series, status-code, or content-type view of bot traffic. Rows are `{ day, botCategory, botLabel, statusCode, contentType, hitCount }`; botCategory is ai_crawler/search_engine/other_bot. Dates are ISO (YYYY-MM-DD), UTC. An empty result means nothing was measured in the range — no bot hits were recorded from the logs uploaded for those days, which is not the same as no bots visiting. FREE (no credits)."
+    },
+    {
+      "name": "log_analyzer_top_paths",
+      "description": "The paths bots hit most, per (bot category, bot label, path, status code) — the busiest-paths table of Bot Analytics. Rows are `{ botCategory, botLabel, path, statusCode, hitCount, lastSeenAt }`, ordered by hitCount descending, capped at 200. Optionally filter to one bot category (ai_crawler/search_engine/other_bot). An empty result means nothing was measured — no bot path hits were recorded from uploaded logs. FREE (no credits)."
+    },
+    {
+      "name": "list_link_prospects",
+      "description": "Link Building Tool: every prospect for a project, newest first, each enriched with a LIVE domain-authority read (never cached, never an invented score). FREE (no credits). White-hat scope: research + outreach assistance only."
+    },
+    {
+      "name": "add_link_prospect",
+      "description": "Link Building Tool: add one prospect domain/page to a project's list. FREE (no credits), but this is a MUTATION. White-hat scope: contact fields are plain manually-typed free text — NEVER auto-scraped or guessed. New prospects start at status 'prospected'; use update_link_prospect_status to move them through the pipeline."
+    },
+    {
+      "name": "update_link_prospect",
+      "description": "Link Building Tool: edit a prospect's editable fields (url/label/targetUrl/contact fields) — only fields given here are changed. FREE (no credits), but this is a MUTATION. `domain` and `status` are not editable here — use update_link_prospect_status for the pipeline stage."
+    },
+    {
+      "name": "update_link_prospect_status",
+      "description": "Link Building Tool: move a prospect through the outreach-status pipeline — prospected -> contacted -> replied -> link_placed/declined/no_response ('declined'/'no_response' can loop back to 'contacted' for a re-approach). FREE (no credits), but this is a MUTATION. Throws on an illegal jump (e.g. prospected straight to link_placed) — the error names the allowed next stage(s). Always appends an activity-log entry describing the change."
+    },
+    {
+      "name": "remove_link_prospect",
+      "description": "Link Building Tool: remove one prospect by id (from list_link_prospects), along with its activity log. FREE (no credits), but this is a MUTATION. Succeeds whether or not prospectId existed."
+    },
+    {
+      "name": "list_link_prospect_activity",
+      "description": "Link Building Tool: a prospect's activity log — every manually-typed note plus every auto-recorded status change, newest first. FREE (no credits)."
+    },
+    {
+      "name": "add_link_prospect_note",
+      "description": "Link Building Tool: add one manual activity-log entry to a prospect, e.g. \"emailed on 9/5\" or \"follow-up sent\". FREE (no credits), but this is a MUTATION."
+    },
+    {
+      "name": "import_link_prospects_csv",
+      "description": "Link Building Tool: bulk-add up to 500 prospects at once from already-parsed rows (each with at least a domain). FREE (no credits), but this is a MUTATION. One bad or duplicate row never aborts the rest — the response reports added/duplicates/errors per row."
+    },
+    {
+      "name": "export_link_prospects_csv",
+      "description": "Link Building Tool: export a project's prospect list as CSV text. FREE (no credits). Save `csvContent` to a .csv file as-is (UTF-8)."
+    },
+    {
+      "name": "get_bing_site_overview",
+      "description": "Bing's own view of a project's domain: daily search performance (clicks/impressions), per-query stats, own-site inbound links, remaining URL Submission quota, crawl diagnostics (crawl stats, crawl issues, crawl settings), submitted feeds and query-parameter settings — read straight from the Bing Webmaster API. FREE (no credits). Bring-your-own-key: requires the deployment operator to set BING_WEBMASTER_API_KEY (one key covers every site verified on that Bing account — no per-project connect step). Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account. Backlinks here are OWN-SITE ONLY — Bing exposes no competitor/any-domain backlink lookup, so this does not substitute for general backlink research. Per-URL lookups and keyword research have their own tools: get_bing_url_links, get_bing_url_info, get_bing_keyword_research."
+    },
+    {
+      "name": "get_bing_backlinks",
+      "description": "GetLinkCounts: own-site inbound-link page list for a project's matched Bing site — the focused, single-call form of the backlinks field already embedded in get_bing_site_overview. FREE (no credits). OWN-SITE ONLY: Bing exposes no competitor/any-domain backlink lookup, and some verified sites are known to return an empty result here even when populated. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "get_bing_url_links",
+      "description": "GetUrlLinks: the inbound links (anchor text + source URL) pointing at one specific page on a project's matched Bing site, read straight from the Bing Webmaster API. FREE (no credits). Own-site only — Bing exposes no competitor/any-domain backlink lookup, and some verified sites are known to return an empty result here even when populated. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "get_bing_url_info",
+      "description": "GetUrlInfo + optionally GetChildrenUrlInfo: index/crawl metadata (anchor count, discovery/last-crawled dates, HTTP status, whether Bing considers it a page) for one URL on a project's matched Bing site, and, when includeChildren is set, the same metadata for every URL Bing discovered under it. FREE (no credits). Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "get_bing_keyword_research",
+      "description": "GetKeyword + GetKeywordStats + GetRelatedKeywords: real Bing impression data for a query, its recent weekly history, and related queries — read straight from the Bing Webmaster API. FREE (no credits). Unlike derived/estimated keyword metrics, these numbers come from Bing's own search-impression logs. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "get_bing_detail_stats",
+      "description": "GetQueryTrafficStats + GetPageStats + GetPageQueryStats + GetQueryPageStats + GetQueryPageDetailStats: per-query and per-page search-performance detail for a project's matched Bing site. FREE (no credits). pageStats (site-wide, weekly) is always attempted. queryTrafficStats/queryPageStats are null unless `query` is given; pageQueryStats is null unless `pageUrl` is given; queryPageDetailStats is null unless both are given — a null section absent from `errors` was not requested, not a failure. pageStats carries one unresolved caveat: Microsoft's own doc page is internally inconsistent about whether that method's `query` field on each row holds a query string or a page URL — surfaced as-is. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "get_bing_feed_details",
+      "description": "GetFeedDetails: the same Feed shape as one entry from Bing's GetFeeds list, for one specific feed URL on a project's matched site. FREE (no credits), read-only. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "submit_bing_content",
+      "description": "SubmitContent: pushes a page's full content (a base64-encoded HTTP message) directly to Bing for a project's matched site, bypassing a crawl. FREE (no credits), but this is a MUTATION — unlike get_bing_site_overview, it queues real work on the operator's live Bing Webmaster account. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "submit_bing_feed",
+      "description": "SubmitFeed: submits a sitemap/feed URL to Bing for a project's matched site. FREE (no credits), but this is a MUTATION — unlike get_bing_site_overview, it queues real work on the operator's live Bing Webmaster account. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "save_bing_crawl_settings",
+      "description": "SaveCrawlSettings: overwrites a project's matched Bing site's crawl-rate/AJAX-crawling config. FREE (no credits), but this is a MUTATION — unlike get_bing_site_overview's GetCrawlSettings read, it writes to the operator's live Bing Webmaster account. crawlRate must have exactly 24 hourly values, per Bing's own documented CrawlSettings JSON sample. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "update_bing_blocked_url",
+      "description": "AddBlockedUrl + RemoveBlockedUrl: tell Bing to stop, or resume, showing one URL in search results for a project's matched site. FREE (no credits), but this is a MUTATION. There is no verified GetBlockedUrls to list current blocks with — add/remove-only. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "update_bing_query_parameter",
+      "description": "AddQueryParameter + RemoveQueryParameter + EnableDisableQueryParameter: add, remove, or toggle one query-string parameter Bing is told to ignore when canonicalizing URLs for a project's matched site. FREE (no credits), but this is a MUTATION. get_bing_site_overview's queryParameters field (GetQueryParameters) is the read half of this family. Bring-your-own-key: requires BING_WEBMASTER_API_KEY. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_site' when the project's domain has no verified match on the account."
+    },
+    {
+      "name": "list_bing_sites",
+      "description": "Every site the caller's connected Bing Webmaster OAuth grant can access — the data source for picking which site to bind to a project (see set_bing_site). Live call to the Bing Webmaster API (GetUserSites) under the caller's OWN OAuth token, not the operator key. Read-only and FREE (no credits). Check `requiresReconnect` before treating an empty `sites` list as 'no sites': true means the stored grant can no longer reach Bing Webmaster."
+    },
+    {
+      "name": "set_bing_site",
+      "description": "Link (or repoint) a project's Bing Webmaster site. `siteUrl` is re-validated against the caller's LIVE site list on every call — fails if the site fell out of the connected account's access since it was last listed via list_bing_sites."
+    },
+    {
+      "name": "disconnect_bing",
+      "description": "Unlink a project's Bing Webmaster site. Breaks Bing Webmaster data for every member of the organization, not just the caller — requires at least the admin role."
+    },
+    {
+      "name": "submit_indexnow",
+      "description": "Submit up to 10,000 of a project's own URLs to IndexNow (relayed to Bing, Yandex, Seznam and Naver) so they are re-crawled without waiting for the next scheduled crawl. FREE — no credits, no OAuth. Requires the project to have an IndexNow key set (PATCH /api/seo/projects/:projectId with { indexNowKey }) — the key it hosts at https://<domain>/<key>.txt. Every completed site-audit crawl also submits its own crawled URLs automatically, so this tool is for resubmitting specific URLs on demand (e.g. right after a manual publish), not the primary path. Every URL must be on the project's own domain — a mixed-host batch is rejected before any request reaches IndexNow."
+    },
+    {
+      "name": "get_yandex_site_overview",
+      "description": "Yandex's own view of a project's domain: the indexing summary — including the Site Quality Index (SQI), a third independent authority signal alongside OpenPageRank and Tranco — and popular search queries, read straight from the Yandex Webmaster API. FREE (no credits). Bring-your-own-token: requires the deployment operator to set YANDEX_WEBMASTER_OAUTH_TOKEN (one token covers every host verified on that Yandex account — no per-project connect step, and MisarSEO never drives the OAuth flow itself). Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_host' when the project's domain has no verified match on the account. Yandex publishes no backlink-lookup endpoint at all, so unlike get_bing_site_overview this has no backlinks section. `diagnostics` lists individually named issues (e.g. NO_SITEMAPS, DNS_ERROR) that `summary.siteProblems` only counts by severity."
+    },
+    {
+      "name": "reindex_yandex_url",
+      "description": "Asks Yandex Webmaster to re-crawl one specific URL on a project's matched host. FREE (no credits), but this is a MUTATION — unlike get_yandex_site_overview, it queues real work on the operator's live Yandex Webmaster account and spends that account's daily recrawl quota. Bring-your-own-token: requires YANDEX_WEBMASTER_OAUTH_TOKEN. Answers { ok: false, reason: 'not_configured' } when unset, or 'no_matching_host' when the project's domain has no verified match on the account. Yandex's own documented failure cases — the URL already queued, or the account's recrawl quota already spent — surface as a normal tool error, not a 200 with ok:false."
+    },
+    {
+      "name": "list_yandex_hosts",
+      "description": "Every host the caller's connected Yandex Webmaster OAuth grant can access — the data source for picking which host to bind to a project (see set_yandex_host). Read-only and FREE (no credits). Check `requiresReconnect` before treating an empty `hosts` list as 'no hosts': true means the stored grant can no longer reach Yandex Webmaster."
+    },
+    {
+      "name": "set_yandex_host",
+      "description": "Link (or repoint) a project's Yandex Webmaster host. `hostId` is re-validated against the caller's LIVE host list on every call."
+    },
+    {
+      "name": "disconnect_yandex",
+      "description": "Unlink a project's Yandex Webmaster host. Breaks Yandex Webmaster data for every member of the organization, not just the caller — requires at least the admin role."
+    },
+    {
+      "name": "get_baidu_connection",
+      "description": "The project's current Baidu Webmaster (百度搜索资源平台) connection, plus today's push-quota usage. `today.lastRemain` is Baidu's own authoritative remaining-quota count as of the last push (null until the first push of the day) — `today.assumedDailyQuota` is a courtesy default only, never a real ceiling, since Baidu computes quota per-site dynamically and publishes no fixed number."
+    },
+    {
+      "name": "set_baidu_connection",
+      "description": "Set (or replace) a project's Baidu Webmaster site + push token. Baidu exposes no API to list or verify sites on an account, unlike Bing's GetUserSites — this stores the pair as given, with no live re-validation against Baidu. Requires the operator/user to have already verified the site on ziyuan.baidu.com and minted a push token there (Resource Submission -> Standard Inclusion -> API Submission)."
+    },
+    {
+      "name": "disconnect_baidu",
+      "description": "Remove a project's Baidu Webmaster connection. Breaks Baidu push submission for every member of the organization, not just the caller — requires at least the admin role."
+    },
+    {
+      "name": "submit_baidu_urls",
+      "description": "Push a project's own URLs to Baidu (data.zz.baidu.com/urls) for expedited crawling. FREE (no credits), but this is a MUTATION that spends the project's real, Baidu-computed daily quota. Answers { ok: false, reason: 'not_connected' } when the project has no Baidu connection, 'quota_exceeded' (with the last-known remain) when today's quota is already spent, or 'site_not_verified' when Baidu reports the site/token pair as unverified — all as a normal result, never a thrown error, since these are expected operational states."
+    },
+    {
+      "name": "list_ahrefs_projects",
+      "description": "Every Rank Tracker AND Site Audit project the caller's connected Ahrefs Connect grant can access — the data source for picking which project(s) to bind to a MisarSEO project (see set_ahrefs_project). Live call to the Ahrefs API v3 under the caller's OWN OAuth token. Read-only and FREE (no credits). Check `requiresReconnect` before treating both lists as 'no projects': true means the stored grant can no longer reach Ahrefs."
+    },
+    {
+      "name": "set_ahrefs_project",
+      "description": "Bind (or repoint) ONE of a project's two independent Ahrefs project types — `projectType` selects `rank_tracker` or `site_audit`. `ahrefsProjectId` is re-validated against the caller's LIVE project list on every call — fails if the project fell out of the connected account's access since it was last listed via list_ahrefs_projects."
+    },
+    {
+      "name": "disconnect_ahrefs",
+      "description": "Full disconnect: drops BOTH the Rank Tracker and Site Audit bindings and the stored grant. Breaks Ahrefs data for every member of the organization, not just the caller — requires at least the admin role."
+    },
+    {
+      "name": "list_patches",
+      "description": "Patches: every title/metaDescription/canonical/redirect fix drafted for a project, newest first, one active row per (page, field). FREE (no credits), read-only."
+    },
+    {
+      "name": "draft_patch",
+      "description": "Patches: drafts a title/metaDescription/canonical/redirect fix for one page's finding. FREE for canonical/redirect (deterministic — canonical is always the page's own URL, redirect always needs an explicit value); title/metaDescription cost one AI-gateway operation UNLESS `value` is given, which sets an explicit replacement instead of drafting one. This is a MUTATION — it creates or overwrites this page+field's draft, but does not publish it (use publish_patch for that). Requires an org admin."
+    },
+    {
+      "name": "batch_draft_patches",
+      "description": "Patches: AI-drafts title AND metaDescription for up to 10 pages in one call. This is a MUTATION and costs one AI-gateway operation per field per page (up to 20) — never a bulk discount. One page/field failing is reported in that entry's own error without sinking the rest of the batch. Requires an org admin."
+    },
+    {
+      "name": "publish_patch",
+      "description": "Patches: makes a drafted fix live — visible in the project's public manifest, which the embedded snippet (or, for redirects, an operator-deployed Worker) reads from the visitor's browser. The audited site's own origin content is never touched. FREE (no credits), but this is a MUTATION. Requires an org admin."
+    },
+    {
+      "name": "revert_patch",
+      "description": "Patches: stops serving a published fix — instant, since publishing only ever controlled visibility in the public manifest, never the audited site's own origin content. FREE (no credits), but this is a MUTATION. Requires an org admin."
+    },
+    {
+      "name": "list_patch_auto_publish_rules",
+      "description": "Patches: every issue type this project auto-publishes a freshly AI-drafted patch for, immediately on draft (capped at 20 auto-publishes per project per day). FREE (no credits), read-only."
+    },
+    {
+      "name": "enable_patch_auto_publish",
+      "description": "Patches: from now on, a freshly AI-drafted patch for this issue type publishes immediately instead of waiting for a manual publish_patch call — capped at 20 auto-publishes per project per day. A hand-typed replacement value (draft_patch's `value` argument) is NEVER auto-published regardless of this rule. FREE (no credits), but this is a MUTATION. Requires an org admin."
+    },
+    {
+      "name": "disable_patch_auto_publish",
+      "description": "Patches: stops auto-publishing freshly AI-drafted patches for this issue type — future drafts wait for a manual publish_patch call again. Already-published patches are unaffected. FREE (no credits), but this is a MUTATION. Requires an org admin."
+    },
+    {
+      "name": "list_report_definitions",
+      "description": "Lists a project's report definitions, each carrying `widgetCount`. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "create_report_definition",
+      "description": "Creates a report definition with a chosen set of widgets, in print order. Returns `{ id }`. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "get_report_definition",
+      "description": "Gets a report definition's name and ordered widget types. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "rename_report_definition",
+      "description": "Renames a report definition. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "delete_report_definition",
+      "description": "Deletes a report definition. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "set_report_widgets",
+      "description": "Replaces a report definition's whole widget list, in print order. Returns `{ widgetCount }`. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "render_report_definition",
+      "description": "Renders a report definition — fetches ONLY its selected widgets, not a fixed set. FREE: every widget is a local Postgres read, no upstream call, so this never spends a paid-provider credit or a live Search Console quota unit. `rank_volatility` and `share_of_voice` read the project's FIRST active rank tracker only; `rank_movers` sums across every active tracker."
+    },
+    {
+      "name": "get_report_schedule",
+      "description": "Gets a report definition's schedule, if it has one. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "upsert_report_schedule",
+      "description": "Creates or replaces a report definition's schedule — the whole interval + recipient list, not individual fields. Requires the admin role in the calling organization, the same gate patch drafting/publishing uses, since this starts unattended recurring email delivery. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "delete_report_schedule",
+      "description": "Deletes a report definition's schedule. Requires the admin role in the calling organization, same as creating one. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "list_portfolios",
+      "description": "Lists the caller organization's portfolios, each carrying `projectCount`. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "create_portfolio",
+      "description": "Creates a portfolio. Returns `{ id }`. Starts with no member projects — use add_portfolio_projects next. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "get_portfolio",
+      "description": "One card per member project (same shape get_dashboard returns — no GSC, no backlinks, see its own description for why) plus aggregate totals. `totals.averageHealthScore` is averaged over member projects that HAVE been audited, not over every member. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "rename_portfolio",
+      "description": "Renames a portfolio. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "delete_portfolio",
+      "description": "Deletes a portfolio. Member projects themselves are untouched — only the grouping is removed. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "add_portfolio_projects",
+      "description": "Adds projects to a portfolio. Returns `{ added }` — only ids that resolve to a project of the CALLER'S organization are added; any other id is silently dropped rather than erroring the whole call. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "remove_portfolio_projects",
+      "description": "Removes projects from a portfolio. Succeeds whether or not an id was actually a member. FREE: database only, no SEO data provider is called and no credits are spent."
+    },
+    {
+      "name": "get_usage",
+      "description": "Plan tier, credits remaining, and every quota/count dimension tracked against it for the caller's organization. FREE: reads counters this codebase already maintains for its own gating — nothing here calls a paid provider or spends a credit. `gatingActive` is false on a self-hosted deployment with no billing provider configured: `tier`, `creditsRemaining` and `quotas` are all null there, not a fabricated tier. `counts` (projects/rank-tracked keywords/API keys) is always populated. Inside a quota dimension, `used: null` means NOT TRACKED — an unlimited tier's counter is never incremented in the first place — never a real zero; `used: 0` IS a real measured zero. `aiGatewayOps` is the shared platform AI-gateway key's own monthly ceiling, reported separately because it is a platform-abuse ceiling, not a plan entitlement."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "keyword_research_plan",
+      "description": "Research a seed topic, qualify the keywords by intent and potential, and save a shortlist.",
+      "arguments": [
+        {
+          "name": "seed",
+          "description": "Seed keyword or topic to research",
+          "required": true
+        },
+        {
+          "name": "project",
+          "description": "Project name or domain (optional)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "competitor_gap_analysis",
+      "description": "Find the keywords and linking domains competitors have that the project does not.",
+      "arguments": [
+        {
+          "name": "competitors",
+          "description": "Comma-separated competitor domains (2-3 recommended)",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "site_audit_review",
+      "description": "Turn the latest site audit into a prioritised technical fix list.",
+      "arguments": [
+        {
+          "name": "project",
+          "description": "Project name or domain",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "search_console_opportunities",
+      "description": "Mine Search Console for striking-distance queries, cannibalisation and decaying pages.",
+      "arguments": [
+        {
+          "name": "range",
+          "description": "Date range, e.g. last28Days (optional)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "ai_visibility_check",
+      "description": "Check how a brand shows up in AI answers and where it is mentioned without a link.",
+      "arguments": [
+        {
+          "name": "brand",
+          "description": "Brand name to check",
+          "required": true
+        },
+        {
+          "name": "domain",
+          "description": "The brand's own domain",
+          "required": false
+        },
+        {
+          "name": "competitors",
+          "description": "Comma-separated competitor brands (optional, up to 5)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "weekly_rank_report",
+      "description": "Produce a stakeholder-ready weekly rank-tracking summary.",
+      "arguments": [
+        {
+          "name": "project",
+          "description": "Project name or domain",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "uri": "misarseo://projects",
+      "name": "Projects",
+      "description": "The organization's active MisarSEO projects with their ids and domains. Read this first — almost every tool needs a projectId, and the keyword-gap and link-intersect reports need the project's domain to be set.",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "misarseo://dashboard",
+      "name": "Cross-project dashboard",
+      "description": "One card per project: latest audit health, rank-tracker status and trailing-7-day web-analytics sessions. Database only — never spends credits or Search Console quota.",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "misarseo://account/usage",
+      "name": "Plan, credits and quotas",
+      "description": "Plan tier, credits remaining, and each quota (keyword lookups, audits, Brand Radar scans, log uploads) with what is used. Check this before running credit-charging tools in bulk.",
+      "mimeType": "application/json"
+    }
+  ]
+}
