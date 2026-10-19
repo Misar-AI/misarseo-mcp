@@ -99,8 +99,8 @@ export const aiSearchTools: ToolDefinition[] = [
     category: "ai-search",
     description:
       "Scans real AI-answer engines and search citations for brand mentions, Share of Voice against " +
-      "named competitors, and cited sources. REQUIRES A PAID PLAN — a free-tier organization gets a " +
-      "plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly " +
+      "named competitors, and cited sources. REQUIRES A PLAN — an organization with no active plan or " +
+      "trial gets a plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly " +
       "Brand Radar scan allowance PLUS one shared AI-gateway operation, both charged BEFORE the " +
       "scan runs. The allowance is spent when the scan is ACCEPTED, before any answer exists — " +
       "every call submits a new scan, so ask before re-running one. The scan runs on a background " +

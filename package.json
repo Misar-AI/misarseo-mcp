@@ -1,6 +1,6 @@
 {
   "name": "@misarseo/mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "mcpName": "io.github.Misar-AI/misarseo-mcp",
   "description": "MisarSEO MCP server — research keywords, track rankings, audit sites, monitor backlinks, Search Console and AI-search visibility from Claude, Cursor, VS Code, Windsurf, and any MCP client.",
   "type": "module",

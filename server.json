@@ -3,7 +3,7 @@
   "name": "io.github.Misar-AI/misarseo-mcp",
   "title": "MisarSEO MCP Server",
   "description": "Research keywords, track rankings, audit sites, monitor backlinks and AI-search visibility — from…",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "url": "https://github.com/Misar-AI/misarseo-mcp",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "@misarseo/mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

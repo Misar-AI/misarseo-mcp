@@ -1,7 +1,7 @@
 {
   "serverInfo": {
     "name": "MisarSEO",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "logoUrl": "https://seo.misar.io/logo-light.png"
   },
   "websiteUrl": "https://www.misarseo.com",
@@ -277,7 +277,7 @@
     },
     {
       "name": "run_brand_radar_scan",
-      "description": "Scans real AI-answer engines and search citations for brand mentions, Share of Voice against named competitors, and cited sources. REQUIRES A PAID PLAN — a free-tier organization gets a plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly Brand Radar scan allowance PLUS one shared AI-gateway operation, both charged BEFORE the scan runs. The allowance is spent when the scan is ACCEPTED, before any answer exists — every call submits a new scan, so ask before re-running one. The scan runs on a background queue: this tool waits up to ~45 seconds for it and returns the result when it completes; if it is still running it returns the `jobId` instead — collect the result with get_brand_radar_scan_status (free to poll) rather than calling this tool again, which would spend another scan. Mentions and AI search volumes are nullable: a null is 'not reported by the platform', never 0."
+      "description": "Scans real AI-answer engines and search citations for brand mentions, Share of Voice against named competitors, and cited sources. REQUIRES A PLAN — an organization with no active plan or trial gets a plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly Brand Radar scan allowance PLUS one shared AI-gateway operation, both charged BEFORE the scan runs. The allowance is spent when the scan is ACCEPTED, before any answer exists — every call submits a new scan, so ask before re-running one. The scan runs on a background queue: this tool waits up to ~45 seconds for it and returns the result when it completes; if it is still running it returns the `jobId` instead — collect the result with get_brand_radar_scan_status (free to poll) rather than calling this tool again, which would spend another scan. Mentions and AI search volumes are nullable: a null is 'not reported by the platform', never 0."
     },
     {
       "name": "get_brand_radar_scan_status",
