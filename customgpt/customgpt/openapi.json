@@ -1,0 +1,2684 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MisarSEO Actions",
+    "description": "Research keywords, track rankings, audit sites, monitor backlinks and AI-search visibility — from any AI assistant.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.misar.io/seo"
+    }
+  ],
+  "paths": {
+    "/mcp/tools/list_projects": {
+      "post": {
+        "operationId": "list_projects",
+        "summary": "List projects",
+        "description": "Lists the active projects in the user's organization. FREE — database only, charges no credits. Use this whenever you need a `projectId` for another MisarSEO tool. Returns `{id, name, domain, url}` per project; pass the `id` value as `projectId`. `domain` is null for a project that has never had one",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_dashboard": {
+      "post": {
+        "operationId": "get_dashboard",
+        "summary": "Get the cross-project dashboard",
+        "description": "One card per active project in the caller's organization: latest audit health, rank-tracker status, and trailing-7-day web-analytics sessions. FREE: database only. No SEO data provider is called and no credits are spent — GSC and backlinks are deliberately excluded from this view rather than fetched",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/research_keywords": {
+      "post": {
+        "operationId": "research_keywords",
+        "summary": "Research keywords (bulk)",
+        "description": "Research keyword data (search volume, difficulty, CPC, related ideas) for 1-5 seed keywords in one call — one research run per seed. Returns `results`, one entry per seed with `ok` — a single bad seed won't fail the batch. CHARGES CREDITS ON THE PAID DATA PROVIDER: per seed, ~30-100 credits each dep",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "seeds"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "seeds": {
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "seed": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Seed keyword to research."
+                        },
+                        "locationCode": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                        },
+                        "languageCode": {
+                          "type": "string",
+                          "minLength": 2,
+                          "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                        }
+                      },
+                      "required": [
+                        "seed"
+                      ]
+                    },
+                    "description": "1-5 seed keywords. Each seed is researched independently and returns related keywords with volume/difficulty/CPC. Bulk-friendly — prefer this over multiple single-seed calls."
+                  },
+                  "resultLimit": {
+                    "description": "Cap on the data provider's own rows per seed. Defaults to 150. It is NOT a cap on `rowCount`: free Google Suggest ideas are appended after the cap is applied, so a seed can legitimately report more rows than this number.",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "const": 150
+                      },
+                      {
+                        "type": "number",
+                        "const": 300
+                      },
+                      {
+                        "type": "number",
+                        "const": 500
+                      }
+                    ]
+                  },
+                  "includeClickstreamData": {
+                    "description": "Refine search volumes with clickstream data, which disaggregates Google Ads' grouped close-variant volumes (plurals/misspellings). On the paid DataForSEO provider this DOUBLES the credit cost of each seed. Default false (standard Google-Ads-derived volumes). Ignored — no cost, no effect — for countries served from Google Ads data, and on the free data provider, whose autocomplete + Keyword Planner sources have no clickstream refinement at all.",
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/list_saved_keywords": {
+      "post": {
+        "operationId": "list_saved_keywords",
+        "summary": "List saved keywords",
+        "description": "Lists keywords saved to a project, with whatever metrics have been cached for them (search volume, difficulty, CPC) and their tags. FREE — reads MisarSEO's own database, runs no provider lookup and charges no credits. Filter by keyword text with `search`; page through with `page` and `limit` (50, 10",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "search": {
+                    "description": "Optional keyword text filter.",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "limit": {
+                    "description": "Maximum rows to return. Defaults to 100.",
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "const": 50
+                      },
+                      {
+                        "type": "number",
+                        "const": 100
+                      },
+                      {
+                        "type": "number",
+                        "const": 250
+                      }
+                    ]
+                  },
+                  "page": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "1-based page number (default 1)."
+                  },
+                  "sort": {
+                    "type": "string",
+                    "enum": [
+                      "createdAt",
+                      "keyword",
+                      "searchVolume",
+                      "cpc",
+                      "competition",
+                      "keywordDifficulty",
+                      "fetchedAt"
+                    ],
+                    "description": "Sort column (default createdAt)."
+                  },
+                  "order": {
+                    "type": "string",
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ],
+                    "description": "Sort direction (default desc)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/save_keywords": {
+      "post": {
+        "operationId": "save_keywords",
+        "summary": "Save keywords",
+        "description": "Save keywords to a project's saved-keywords list. FREE — database only, charges no credits. Idempotent: re-saving an existing keyword is a no-op. If tags are provided, missing tags may be created. Tags are appended to whatever tags a keyword already carries. Ask the user for confirmation before appl",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keywords"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keywords": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Keywords to save (1-100)."
+                  },
+                  "tags": {
+                    "description": "Optional tags to attach to every saved keyword. Ask the user for explicit confirmation before using this, especially when saving many keywords or creating new tag names.",
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/classify_keyword_intent": {
+      "post": {
+        "operationId": "classify_keyword_intent",
+        "summary": "Classify keyword search intent",
+        "description": "Classify 1-200 keywords' search intent from their wording: informational, navigational, commercial, transactional, or unknown. Uses the SAME wording heuristic keyword research already applies as its free-tier fallback, made directly callable for a keyword list with no research/volume data yet. FREE ",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keywords"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keywords": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "1-200 keywords to classify."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_keyword_serp_overview": {
+      "post": {
+        "operationId": "get_keyword_serp_overview",
+        "summary": "Get per-keyword SERP overview with tracked history/volatility",
+        "description": "Per-keyword SERP overview: a fresh live SERP snapshot for the keyword, PLUS — when this exact keyword happens to already be tracked in this project's rank tracking — its historical position trend and SERP volatility, read straight from the SAME rank-tracking services (`get_rank_keyword_history`/`get",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keyword"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keyword": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The keyword to look up."
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  },
+                  "sinceDays": {
+                    "description": "How many days of tracked history to return, 1-730 (default 365). Only meaningful when the keyword is tracked.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 730
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_keyword_strategy": {
+      "post": {
+        "operationId": "get_keyword_strategy",
+        "summary": "Run the Keyword Strategy Builder pipeline",
+        "description": "Keyword Strategy Builder: a volume -> cluster -> page -> brief pipeline over 1-500 pasted keywords, composed entirely from existing pieces — the same bulk keyword lookup, the same shared-phrase clustering engine the saved-keyword Topic Clusters feature and get_topic_research both already use, a text",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keywords"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keywords": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "1-500 keywords to analyze (e.g. from a bulk research run or an export)."
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_topic_research": {
+      "post": {
+        "operationId": "get_topic_research",
+        "summary": "Get topic research ideas",
+        "description": "Content ideas for a seed keyword, composed from three sources this codebase already fetches for other features: the SERP for the seed (titles of pages already ranking for it), PAA-style questions (real autocomplete completions reframed as questions), and autocomplete keyword suggestions. Grouped int",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keyword"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keyword": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The seed keyword to research."
+                  },
+                  "locationCode": {
+                    "description": "Numeric location code. Defaults to the project's stored market, else 2840 (United States).",
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "languageCode": {
+                    "description": "Language code. Defaults to the project's stored market, else 'en'.",
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_domain_overview": {
+      "post": {
+        "operationId": "get_domain_overview",
+        "summary": "Get domain overview",
+        "description": "Returns a high-level view of a domain's organic footprint: estimated organic traffic, organic keyword count, and a 0-100 domain authority score. Use this first for domain research. `backlinks` and `referringDomains` are ALWAYS null on this tool — no data provider feeds them here, so a null is the ab",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "domain"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "domain": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Domain to analyze (e.g. 'example.com')."
+                  },
+                  "includeSubdomains": {
+                    "default": false,
+                    "description": "Include subdomains in the domain's metrics. Defaults to false.",
+                    "type": "boolean"
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_domain_authority_history": {
+      "post": {
+        "operationId": "get_domain_authority_history",
+        "summary": "Get domain-authority history",
+        "description": "Domain-authority history: the stored trend of dated authority snapshots for one project+domain, oldest first. FREE (no credits) — reads back snapshots already captured, no provider call. Empty until at least one snapshot exists: get_domain_overview auto-captures one whenever `domain` is the project'",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "domain"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "domain": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Domain to read history for (e.g. 'example.com')."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/find_serp_competitors": {
+      "post": {
+        "operationId": "find_serp_competitors",
+        "summary": "Find SERP competitors",
+        "description": "Compares domains competing in search results for a supplied keyword set. Useful for market and search-intelligence reports; not radius-based local SEO. The inverse of get_keyword_gap, which asks what one competitor ranks for that we do not. CHARGES CREDITS ON THE PAID DATA PROVIDER, which is also th",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "keywords"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "keywords": {
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "description": "Keywords whose SERPs are compared (1-100)."
+                  },
+                  "resultTypes": {
+                    "description": "SERP result types to include. Defaults to organic and local_pack.",
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "organic",
+                        "paid",
+                        "featured_snippet",
+                        "local_pack"
+                      ]
+                    }
+                  },
+                  "excludeDomains": {
+                    "description": "Domains to exclude from results (e.g. the user's own site).",
+                    "minItems": 1,
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  },
+                  "includeSubdomains": {
+                    "description": "Count subdomains as part of the same competitor domain.",
+                    "type": "boolean"
+                  },
+                  "sortBy": {
+                    "description": "Sort order for returned competitors. Defaults to visibility. Only `keyword_count` and `avg_position` are measured on every provider — `visibility` and `traffic_estimate` are unmeasured on the free provider, and rows without the chosen field sort last rather than as zero. Prefer `keyword_count` when you need an order that always means something.",
+                    "type": "string",
+                    "enum": [
+                      "visibility",
+                      "traffic_estimate",
+                      "avg_position",
+                      "keyword_count"
+                    ]
+                  },
+                  "limit": {
+                    "description": "Maximum competitors to return (1-100). Defaults to 50.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "offset": {
+                    "description": "Rows to skip for pagination.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_keyword_gap": {
+      "post": {
+        "operationId": "get_keyword_gap",
+        "summary": "Get keyword gap vs competitors",
+        "description": "Compares the project's own domain against up to 3 competitor domains and classifies every keyword a competitor ranks for as missing / behind / tied / ahead / unknown. The inverse of find_serp_competitors, which asks who competes for a keyword set. CHARGES CREDITS: one ranked-keywords lookup per doma",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "competitorDomains"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "competitorDomains": {
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "1–3 competitor domains (bare domain or full URL). Each one is a separate billable ranked-keywords lookup, so pick the rivals actually being chased. The project's own domain is added automatically and is ignored if it appears here."
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  },
+                  "includeSubdomains": {
+                    "description": "Count subdomains as part of a domain. Defaults to true, and applies to every compared domain including ours.",
+                    "type": "boolean"
+                  },
+                  "sortField": {
+                    "description": "Sort column: 'volume' (default), 'theirPosition' or 'ourPosition'. All three are measured values — there is deliberately no composite opportunity score. Nulls sort last in both directions.",
+                    "type": "string",
+                    "enum": [
+                      "volume",
+                      "theirPosition",
+                      "ourPosition"
+                    ]
+                  },
+                  "sortOrder": {
+                    "description": "Sort direction. Defaults to 'desc'.",
+                    "type": "string",
+                    "enum": [
+                      "asc",
+                      "desc"
+                    ]
+                  },
+                  "classifications": {
+                    "description": "Restrict rows to these classifications. Omit for all five — omitting never hides `unknown`. The filter is applied before the row cap, and `totalRows` reports the pre-cap match count.",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "missing",
+                        "behind",
+                        "tied",
+                        "ahead",
+                        "unknown"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_rank_tracker": {
+      "post": {
+        "operationId": "get_rank_tracker",
+        "summary": "Get rank tracker",
+        "description": "Read-only access to rank tracker configs and their latest results. With `trackerId`, returns the config plus the latest snapshot per keyword. Without it, lists all trackers in the project. FREE — reads stored MisarSEO state only, runs no SERP query and charges no credits. To trigger a new check, use",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "trackerId": {
+                    "description": "Rank tracker config ID. If omitted, lists all rank trackers in the project.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_rank_movers": {
+      "post": {
+        "operationId": "get_rank_movers",
+        "summary": "Get rank tracker newcomers and fast climbers",
+        "description": "Newcomers and fast climbers for a tracker's OWN domain, over a window. `newlyRanking` is keywords that started ranking during the window (no earlier position, or an earlier position of null). `fastClimbers` is keywords that ranked at both ends of the window and gained at least `minGain` positions. F",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "configId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "configId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Rank tracker config ID. Call get_rank_tracker without a trackerId to list the project's trackers and their IDs."
+                  },
+                  "sinceDays": {
+                    "description": "How many days back to look, 1–730. Defaults to 365.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 730
+                  },
+                  "minGain": {
+                    "description": "Positions a keyword must have gained to count as a fast climber, 1–100. Defaults to 5. Does not affect newlyRanking, which has no earlier position to measure a gain from.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_rank_keyword_history": {
+      "post": {
+        "operationId": "get_rank_keyword_history",
+        "summary": "Get one keyword's rank history",
+        "description": "Per-keyword position series over time, oldest first — the same series the app's SERP-history chart draws for one tracked keyword. FREE: database only. No SEO data provider is called and no credits are spent. A `position` of `null` means checked but not found within that check's `searchedDepth` — a r",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "configId",
+                  "trackingKeywordId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "configId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Rank tracker config ID. Call get_rank_tracker without a trackerId to list the project's trackers and their IDs."
+                  },
+                  "trackingKeywordId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The tracked keyword's own row ID (from get_rank_tracker's results), not the keyword text."
+                  },
+                  "sinceDays": {
+                    "description": "How many days back to look, 1–730. Defaults to 365.",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 730
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_audit_core_web_vitals": {
+      "post": {
+        "operationId": "get_audit_core_web_vitals",
+        "summary": "Get Core Web Vitals report",
+        "description": "Core Web Vitals report: LCP/INP/CLS per page/strategy this audit already ran Lighthouse against, classified against Google's own published thresholds. No new fetch — reads audit_lighthouse_results, the same table the results UI already renders as raw numbers. LAB DATA ONLY, never Search Console's re",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "auditId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "auditId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Audit ID, from crawl_site or get_crawl_results."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_audit_internal_links": {
+      "post": {
+        "operationId": "get_audit_internal_links",
+        "summary": "Get Internal Link Report",
+        "description": "Internal Link Report: outbound/inbound internal link counts per page, orphan pages, dead ends, and click-depth distribution for a project's latest completed crawl (or a named earlier one). No new computation — reads the same audit_pages/audit_issues columns already powering the in-app internal-links",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "auditId": {
+                    "description": "Audit ID, from crawl_site or get_crawl_results. Omitted means the latest completed audit for this project.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_search_console_performance": {
+      "post": {
+        "operationId": "get_search_console_performance",
+        "summary": "Get Google Search Console performance",
+        "description": "Query the connected Search Console property's Search Analytics: clicks, impressions, CTR, and average position by query/page/country/device/date. First-party data — use it for what already ranks, near-ranking queries, and pages with real demand. ctr is a 0-1 fraction; position is a 1-based average; ",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "dimensions": {
+                    "description": "Group rows by these dimensions. Default ['query']. Use ['page'] for top pages, ['query','page'] to map queries to pages / spot cannibalization, ['date'] for a time series.",
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "query",
+                        "page",
+                        "country",
+                        "device",
+                        "date",
+                        "searchAppearance",
+                        "hour"
+                      ]
+                    }
+                  },
+                  "dateRange": {
+                    "description": "Convenience window (default last_28_days). End is set ~3 days back for GSC data lag. Ignored if startDate+endDate are given. Max lookback is 16 months.",
+                    "type": "string",
+                    "enum": [
+                      "last_7_days",
+                      "last_28_days",
+                      "last_3_months",
+                      "last_6_months",
+                      "last_12_months",
+                      "last_16_months"
+                    ]
+                  },
+                  "startDate": {
+                    "description": "Explicit start (YYYY-MM-DD, Pacific Time). Use with endDate.",
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "endDate": {
+                    "description": "Explicit end (YYYY-MM-DD, Pacific Time). Use with startDate.",
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "filters": {
+                    "description": "AND-combined filters. To get the queries for one page: [{dimension:'page',operator:'equals',expression:'https://example.com/post'}] with dimensions ['query'].",
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "query",
+                            "page",
+                            "country",
+                            "device",
+                            "date",
+                            "searchAppearance",
+                            "hour"
+                          ]
+                        },
+                        "operator": {
+                          "default": "equals",
+                          "type": "string",
+                          "enum": [
+                            "equals",
+                            "notEquals",
+                            "contains",
+                            "notContains"
+                          ]
+                        },
+                        "expression": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "expression"
+                      ]
+                    }
+                  },
+                  "rowLimit": {
+                    "description": "Rows per call (default 1000, max 1000). GSC sorts by clicks desc and can't filter by position — filter 'striking distance' positions client-side, and paginate with startRow when hasMore is true.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000
+                  },
+                  "startRow": {
+                    "description": "Pagination offset.",
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "type": {
+                    "description": "Search type (default web).",
+                    "type": "string",
+                    "enum": [
+                      "web",
+                      "image",
+                      "video",
+                      "news",
+                      "googleNews",
+                      "discover"
+                    ]
+                  },
+                  "dataState": {
+                    "description": "'all' (default) includes fresh/incomplete recent data.",
+                    "type": "string",
+                    "enum": [
+                      "all",
+                      "final"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/inspect_urls": {
+      "post": {
+        "operationId": "inspect_urls",
+        "summary": "Inspect URLs in Google Search Console",
+        "description": "Run Google Search Console's URL Inspection on up to 10 URLs of the connected property: index/coverage state, last crawl time, Google-selected vs declared canonical, and mobile/rich-results verdicts. Use it to answer 'is this page indexed? why not?'. Read-only and FREE (no credits) — Search Console i",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "urls"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "urls": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uri"
+                    },
+                    "description": "1–10 absolute URLs to inspect. Each must belong to the connected property."
+                  },
+                  "languageCode": {
+                    "description": "BCP-47 language for the inspection result (e.g. 'en-US').",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_cannibalisation_report": {
+      "post": {
+        "operationId": "get_cannibalisation_report",
+        "summary": "Get keyword cannibalisation report",
+        "description": "Finds the queries where the project's connected Search Console property competes with itself: two or more of its own pages drawing impressions for the same query, splitting that query's clicks, click signals and ranking history across URLs. Read-only and FREE (no credits) — Search Console is first-p",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "window": {
+                    "description": "Analysis window (default last_28_days). Capped at three months on purpose — Search Console's longer ranges are NOT offered, because over a long window 'two pages received impressions' also describes a page migration, and calling that cannibalisation sends someone to consolidate pages that are already consolidated. The window end is backed off ~3 days for Search Console's data lag.",
+                    "type": "string",
+                    "enum": [
+                      "last_7_days",
+                      "last_28_days",
+                      "last_3_months"
+                    ]
+                  },
+                  "sort": {
+                    "description": "Finding order (default impressions). 'impressions' = most affected search demand first. 'position_spread' = smallest gap between the competing pages' average positions first, i.e. the pages Google rated most interchangeable. Both order by one measured quantity; there is deliberately no composite severity score.",
+                    "type": "string",
+                    "enum": [
+                      "impressions",
+                      "position_spread"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_content_decay_report": {
+      "post": {
+        "operationId": "get_content_decay_report",
+        "summary": "Get content decay report",
+        "description": "Finds pages whose clicks declined by a meaningful amount between two adjacent windows, read entirely from MisarSEO's own archived Search Console history (the top-200-per-day per-page archive the nightly sync fills in). Read-only and FREE (no credits), and makes NO live Search Console call — unlike g",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "window": {
+                    "description": "The RECENT period length (default last_28_days). The EARLIER period compared against it is the same length immediately before it — a period-over-period comparison, not a calendar-month split.",
+                    "type": "string",
+                    "enum": [
+                      "last_28_days",
+                      "last_90_days"
+                    ]
+                  },
+                  "minEarlierClicks": {
+                    "description": "A page must have had at least this many clicks in the earlier window to be considered at all (default 10) — a noise floor, not part of the decay definition.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "declineThresholdPct": {
+                    "description": "How big a decline (percent) is required to be reported (default 20). 0 disables reporting entirely.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_backlinks_overview": {
+      "post": {
+        "operationId": "get_backlinks_overview",
+        "summary": "Get backlinks overview",
+        "description": "Returns a backlinks profile summary (total backlinks, referring domains, referring pages, rank) plus the top referring domains by backlink count. CHARGES CREDITS ON THE PAID DATA PROVIDER (~200-500 typical): two lookups per call, the summary and one page of referring domains. UNAVAILABLE ON THE DEFA",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "target"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "target": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Domain or URL to analyze (e.g. 'example.com' or 'https://example.com/blog')."
+                  },
+                  "scope": {
+                    "description": "'domain' analyzes the whole domain; 'page' analyzes a specific URL. Defaults to 'domain'.",
+                    "type": "string",
+                    "enum": [
+                      "domain",
+                      "page"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_content_optimizer_report": {
+      "post": {
+        "operationId": "get_content_optimizer_report",
+        "summary": "Get on-page content optimizer + AI grade",
+        "description": "On-page recommendations and an AI content grade for one page, benchmarked against the pages currently ranking for its target keyword, built together — one AI-gateway call produces both the grade and the recommendations). CHARGES ONE AI-gateway operation against the organization's shared monthly ceil",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "url",
+                  "keyword"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "The page to grade (any http(s) URL)."
+                  },
+                  "keyword": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The keyword this page is meant to rank for."
+                  },
+                  "locationCode": {
+                    "description": "Numeric location code. Defaults to the project's stored market, else 2840 (United States).",
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "languageCode": {
+                    "description": "Language code. Defaults to the project's stored market, else 'en'.",
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 8
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/run_brand_radar_scan": {
+      "post": {
+        "operationId": "run_brand_radar_scan",
+        "summary": "Run AI Brand Radar scan",
+        "description": "Scans real AI-answer engines and search citations for brand mentions, Share of Voice against named competitors, and cited sources. REQUIRES A PLAN — an organization with no active plan or trial gets a plan-locked error, not an empty result — and CONSUMES ONE of the organization's monthly Brand Radar",
+        "x-openai-isConsequential": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "brand"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "brand": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 250,
+                    "description": "Brand, domain, or product name to scan."
+                  },
+                  "competitors": {
+                    "description": "Up to 5 competitor brands/domains to compare Share of Voice against.",
+                    "maxItems": 5,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 250
+                    }
+                  },
+                  "locationCode": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "description": "DataForSEO location code. Omit it to use the project's default market, which falls back to 2840 (United States) for a project that has not set one. See dataforseo.com/help-center/locations. Some countries (e.g. Iceland, 2352) are served from Google Ads data: keyword volume/CPC/trends work, but keyword difficulty, search intent, and domain analytics are unavailable."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_brand_radar_scan_status": {
+      "post": {
+        "operationId": "get_brand_radar_scan_status",
+        "summary": "Get AI Brand Radar scan status",
+        "description": "Status of a Brand Radar scan started by run_brand_radar_scan, by its `jobId`. `status` is queued/running/complete/errored; a complete scan carries the shaped `result` (share of voice, top cited pages, top prompts), an errored one carries `error.message`. FREE to poll: a completed scan re-reads the c",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID the scan was run for."
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The `jobId` returned by run_brand_radar_scan."
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "jobId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/research_ai_prompts": {
+      "post": {
+        "operationId": "research_ai_prompts",
+        "summary": "Research AI prompts",
+        "description": "Turns a seed topic into candidate prompts worth tracking (real Google/Bing autocomplete completions reframed as questions) plus observed mention-rate signals from this project's own already-tracked prompts. This is NOT prompt search volume — no honest corpus of 'how many people ask this' exists anyw",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "seedTopic"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "seedTopic": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Topic to derive trackable prompt candidates from."
+                  },
+                  "languageCode": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "Language code (e.g. 'en', 'es', 'fr'). Omit it to use the project's default market language, which falls back to 'en'."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_local_rank_grid": {
+      "post": {
+        "operationId": "get_local_rank_grid",
+        "summary": "Get local rank grid",
+        "description": "Read-only access to geo-grid rank-tracking configs and their latest run. With `configId`, returns that config's latest run plus per-point results (position, url, and the place name each point was reverse-geocoded to for its location override — null means no override was applied). Without it, lists a",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "configId": {
+                    "description": "Grid config ID. If omitted, lists all grid configs in the project.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_web_analytics_summary": {
+      "post": {
+        "operationId": "get_web_analytics_summary",
+        "summary": "Get Web Analytics summary",
+        "description": "Sessions/pageviews/bounce-rate time series for a project's own tracking snippet. FREE — first-party data collected by MisarSEO's own snippet (/api/analytics/snippet.js), never a paid or rate-limited third-party call. `totals.bounceRate` is null (not 0) when there were no sessions in the range.",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "startDate",
+                  "endDate"
+                ],
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Required. The MisarSEO project ID to scope this call to. Get one from list_projects."
+                  },
+                  "startDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "description": "YYYY-MM-DD, required."
+                  },
+                  "endDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "description": "YYYY-MM-DD, required, not before startDate."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    },
+    "/mcp/tools/get_usage": {
+      "post": {
+        "operationId": "get_usage",
+        "summary": "Get plan/credit/quota usage",
+        "description": "Plan tier, credits remaining, and every quota/count dimension tracked against it for the caller's organization. FREE: reads counters this codebase already maintains for its own gating — nothing here calls a paid provider or spends a credit. `gatingActive` is false on a self-hosted deployment with no",
+        "x-openai-isConsequential": false,
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "result": {
+                      "description": "The tool's output — text or JSON."
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "result"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON body"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          },
+          "402": {
+            "description": "Plan limit — the body carries code: plan_limit_exceeded and an upgrade offer"
+          },
+          "404": {
+            "description": "Unknown tool"
+          },
+          "429": {
+            "description": "Rate limited, or a quota block carrying code: plan_limit_exceeded"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "MisarSEO API key (mseo_…) from https://seo.misar.io/ai"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}
